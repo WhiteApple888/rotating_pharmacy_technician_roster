@@ -15,7 +15,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Audit a 16-staff, 28-day Excel roster.")
     parser.add_argument("roster", type=Path, help="Input .xlsx roster file")
     parser.add_argument("--sheet", help="Worksheet to audit (default: active worksheet)")
-    parser.add_argument("--start_date", type=date.fromisoformat, help="Roster Day 1 date, needed for ISO PH dates")
+    parser.add_argument(
+        "--start_date", type=date.fromisoformat, required=True,
+        help="Roster Day 1 date; required for lastRosterRD and RD-stretch validation",
+    )
     parser.add_argument("--ph", action="append", default=[], metavar="DAYS", help="Comma-separated PH day numbers and/or ISO dates; may be repeated")
     parser.add_argument("--report", type=Path, help="Output report (default: <roster>_audit.xlsx)")
     args = parser.parse_args()

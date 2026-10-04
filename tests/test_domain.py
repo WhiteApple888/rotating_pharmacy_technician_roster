@@ -1,6 +1,7 @@
 """Tests for staff-level roster constraints."""
 
 import unittest
+from datetime import date
 
 from roster_audit.individual_staff_constraints import (
     Roster,
@@ -15,8 +16,8 @@ from roster_audit.individual_staff_constraints import (
 
 
 class IndividualConstraintTests(unittest.TestCase):
-    def test_rest_day_spacing_counts_all_rest_day_codes(self) -> None:
-        shifts = ("RD+",) + ("XE1",) * 11 + ("RD++",) + ("XE1",) * 15
+    def test_rest_day_spacing_uses_rd_and_vlrd_for_work_stretches(self) -> None:
+        shifts = ("RD",) + ("XE1",) * 11 + ("VLRD",) + ("XE1",) * 11 + ("RD",) * 4
         failures = audit_rest_day_spacing(StaffSchedule(6, shifts))
 
         self.assertEqual(failures, [])
@@ -68,7 +69,30 @@ class IndividualConstraintTests(unittest.TestCase):
     def test_rest_day_spacing_reports_gaps_larger_than_twelve_days(self) -> None:
         schedule = StaffSchedule(6, ("RD",) + ("XE1",) * 12 + ("RD",) + ("XE1",) * 14)
 
-        failures = audit_rest_day_spacing(schedule)
+        failures = audit_rest_day_spacing(schedule, start_date=date(2026, 4, 13))
+
+        self.assertEqual(len(failures), 2)
+        self.assertIn("13 days apart", failures[0].message)
+
+    def test_rest_day_spacing_includes_the_prior_roster_rd_boundary(self) -> None:
+        schedule = StaffSchedule(6, ("XE1",) * 12 + ("RD",) + ("RD",) * 15)
+
+        failures = audit_rest_day_spacing(
+            schedule, date(2026, 4, 12), date(2026, 4, 13), include_schedule_gaps=False,
+        )
 
         self.assertEqual(len(failures), 1)
-        self.assertIn("13 days apart", failures[0].message)
+        self.assertEqual(failures[0].day, 13)
+        self.assertIn("25 April 2026", failures[0].message)
+        self.assertIn("12 consecutive working days", failures[0].message)
+
+    def test_rest_day_spacing_flags_a_roster_that_ends_with_more_than_twelve_work_days(self) -> None:
+        schedule = StaffSchedule(6, ("RD",) + ("XE1",) * 27)
+
+        failures = audit_rest_day_spacing(
+            schedule, date(2026, 4, 12), date(2026, 4, 13), include_schedule_gaps=False,
+        )
+
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0].day, 28)
+        self.assertIn("27 consecutive working days", failures[0].message)

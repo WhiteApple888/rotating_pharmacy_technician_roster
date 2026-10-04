@@ -27,7 +27,7 @@ roster-audit ROSTER.xlsx [--sheet SHEET] [--start_date YYYY-MM-DD] [--ph DAYS] [
 | --- | --- |
 | `ROSTER.xlsx` | Required source workbook. It must be an `.xlsx` file. |
 | `--sheet SHEET` | Worksheet to audit. Defaults to the active worksheet. |
-| `--start_date YYYY-MM-DD` | Calendar date for roster Day 1. Required when a public holiday is supplied as a date. |
+| `--start_date YYYY-MM-DD` | Calendar date for roster Day 1. Required for `lastRosterRD`, rest-day-spacing, and ISO public-holiday validation. |
 | `--ph DAYS` | Public-holiday roster days or ISO dates. Accepts comma-separated values and can be repeated. |
 | `--report REPORT.xlsx` | Destination for the audit workbook. Defaults to `<source-name>_audit.xlsx` beside the source file. |
 
@@ -41,7 +41,7 @@ Audit the included roster, treating roster Day 1 as a public holiday and
 writing the results to `roster_audit.xlsx`:
 
 ```powershell
-roster-audit .\13Apr-10May_26.xlsx --ph 1 --report .\roster_audit.xlsx
+roster-audit .\13Apr-10May_26.xlsx --start_date 2026-04-13 --ph 1 --report .\roster_audit.xlsx
 ```
 
 Public holidays can also be supplied as ISO dates. The following command uses
@@ -63,6 +63,18 @@ Audit report: roster_audit.xlsx
 The report contains a `Summary` sheet with the result and input details, and a
 `Failures` sheet listing each broken constraint. A passing roster prints
 `STATUS: PASS` and has no rows in `Failures`.
+
+## Rest-day history checks
+
+The source workbook must contain a `lastRosterRD` sheet. Cells `B2:B17` map,
+in order, to roster staff rows `6:21`; each cell must contain an Excel date
+strictly before roster Day 1. The auditor uses each staff member's historical
+RD to check the Day 1 boundary. It also checks rest-day gaps within the roster
+and work stretches of 12 or more days that continue to roster Day 28.
+
+Rest-day-spacing and daily-coverage failures include roster dates whenever
+`--start_date` is provided. The Excel report's `Failures` sheet includes a
+`roster_date` column alongside the staff row and roster day for easier review.
 
 ## Repository layout
 
@@ -88,5 +100,13 @@ Add or update a focused test whenever a policy changes.
 After installing the project, run the test suite with the standard library:
 
 ```powershell
+python -m unittest discover -s tests -v
+```
+
+If you have not installed the project in the active environment, run the same
+command with `PYTHONPATH` pointed at `src`:
+
+```powershell
+$env:PYTHONPATH = "src"
 python -m unittest discover -s tests -v
 ```

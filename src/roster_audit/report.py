@@ -10,7 +10,10 @@ from .individual_staff_constraints import AuditFailure, Roster
 
 def write_report(report_path: Path, failures: list[AuditFailure], source: Path, roster: Roster, ph_days: set[int]) -> None:
     """Export audit results to a formatted Excel report."""
-    failure_frame = pd.DataFrame([asdict(failure) for failure in failures], columns=["category", "staff_row", "day", "message"])
+    failure_frame = pd.DataFrame(
+        [asdict(failure) for failure in failures],
+        columns=["category", "staff_row", "day", "roster_date", "source_cell", "message"],
+    )
     summary = pd.DataFrame([{
         "status": "PASS" if failure_frame.empty else "FAIL",
         "source_file": str(source),

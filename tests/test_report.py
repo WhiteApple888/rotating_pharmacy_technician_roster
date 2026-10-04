@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -16,7 +17,10 @@ class ReportTests(unittest.TestCase):
             report_path = Path(directory) / "audit.xlsx"
             write_report(
                 report_path,
-                [AuditFailure("Daily coverage", "coverage failed", day=3)],
+                [AuditFailure(
+                    "Daily coverage", "coverage failed", day=3,
+                    roster_date=date(2026, 4, 15), source_cell="D6",
+                )],
                 Path("source.xlsx"),
                 Roster("April roster", ()),
                 {3, 1},
@@ -32,5 +36,7 @@ class ReportTests(unittest.TestCase):
                 self.assertEqual(summary["E2"].value, 1)
                 self.assertEqual(failures["A2"].value, "Daily coverage")
                 self.assertEqual(failures["C2"].value, 3)
+                self.assertEqual(failures["D2"].value.date(), date(2026, 4, 15))
+                self.assertEqual(failures["E2"].value, "D6")
             finally:
                 workbook.close()
