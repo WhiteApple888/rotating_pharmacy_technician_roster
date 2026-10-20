@@ -8,6 +8,77 @@ modified.
 The application is the `roster_audit` package under `src/` and requires Python
 3.10 or later.
 
+## HTTP API (FastAPI)
+
+The project includes a stateless FastAPI application for a separately hosted
+React client. It audits an uploaded workbook entirely in memory and returns
+JSON; it never writes an upload or a report file to the server.
+
+Start it locally after installing the project:
+
+```powershell
+uvicorn roster_audit.api:app --host 0.0.0.0 --port 8000
+```
+
+`GET /health` returns `{"status":"ok"}` and is suitable for a Render health
+check. `POST /api/v1/audit` accepts `multipart/form-data` with these fields:
+
+| Field | Required | Format |
+| --- | --- | --- |
+| `file` | Yes | `.xlsx` file with MIME type `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`; maximum 10 MB. |
+| `start_date` | Yes | ISO date (`YYYY-MM-DD`) for roster Day 1. |
+| `public_holidays` | No | Repeated values or a comma-separated list of roster days (`1`--`28`) and/or ISO dates. |
+| `num_staff` | No | Positive integer, maximum 100; defaults to 16. The grid begins at row 6. |
+
+The uploaded workbook must include the `lastRosterRD` worksheet used by the
+CLI. Its column B supplies one previous rest-day date per staff member; the
+API reads `B2` onward for the submitted `num_staff` rows.
+
+Example request:
+
+```bash
+curl --request POST "http://localhost:8000/api/v1/audit" \
+  --form "start_date=2026-04-13" \
+  --form "public_holidays=2026-04-17,12" \
+  --form "num_staff=16" \
+  --form "file=@sample/13Apr-10May_26.xlsx;type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+```
+
+Successful requests return the stable React contract below. It mirrors every
+field of `AuditFailure`; dates are ISO strings or `null`.
+
+```json
+{
+  "status": "FAIL",
+  "passed": false,
+  "failure_count": 1,
+  "worksheet": "Roster",
+  "failures": [{
+    "category": "Daily coverage",
+    "message": "...",
+    "staff_row": null,
+    "day": 1,
+    "source_cell": null,
+    "roster_date": "2026-04-13"
+  }]
+}
+```
+
+Bad form input or an unreadable workbook returns HTTP 400 as
+`{"error":{"code":"...","message":"...","details":[...]}}`. Invalid
+file extension or MIME type returns 415, and an upload over 10 MB returns 413.
+The interactive OpenAPI contract is available at `/docs`.
+
+### Render and Vercel
+
+`render.yaml` deploys the API with `uvicorn`, a `/health` health check, and
+Python 3.11. Set Render's `CORS_ALLOWED_ORIGINS` environment variable to a
+comma-separated allow-list containing the exact Vercel frontend origin, for
+example `https://roster.example.vercel.app`. Local development defaults only to
+`http://localhost:5173`; no wildcard CORS origin is used. Render free instances
+can cold-start after inactivity, so the frontend should surface a retry-friendly
+loading state for an initial request that takes longer than usual.
+
 ## Installation
 
 From the repository root, create an environment if desired, then install the
@@ -66,11 +137,12 @@ The report contains a `Summary` sheet with the result and input details, and a
 
 ## Rest-day history checks
 
-The source workbook must contain a `lastRosterRD` sheet. Cells `B2:B17` map,
-in order, to roster staff rows `6:21`; each cell must contain an Excel date
-strictly before roster Day 1. The auditor uses each staff member's historical
-RD to check the Day 1 boundary. It also checks rest-day gaps within the roster
-and work stretches of 12 or more days that continue to roster Day 28.
+The source workbook must contain a `lastRosterRD` sheet. Starting at `B2`, one
+cell maps in order to each submitted roster staff row, starting at row 6. Each
+cell must contain an Excel date strictly before roster Day 1. The auditor uses
+each staff member's historical RD to check the Day 1 boundary. It also checks
+rest-day gaps within the roster and work stretches of 12 or more days that
+continue to roster Day 28.
 
 Rest-day-spacing and daily-coverage failures include roster dates whenever
 `--start_date` is provided. The Excel report's `Failures` sheet includes a

@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-STAFF_ROWS = range(6, 22)
+TOTAL_NUMBER_OF_STAFF = 16
 MAX_REST_DAY_GAP = 12
+
 
 SHIFT_HOURS: dict[str, int] = {
     "XE1": 8, "XO": 8, "Z1": 8, "Z": 8, "Y": 8, "PH": 8, "VL": 8, "OC": 8,

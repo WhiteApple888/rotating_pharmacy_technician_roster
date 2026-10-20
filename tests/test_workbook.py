@@ -41,6 +41,21 @@ class WorkbookTests(unittest.TestCase):
         self.assertEqual(rest_days.dates[0], date(2026, 4, 12))
         self.assertEqual(rest_days.dates[1], date(2026, 4, 10))
 
+    def test_load_last_roster_rest_days_reads_only_the_submitted_staff_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "roster.xlsx"
+            workbook = Workbook()
+            history = workbook.create_sheet("lastRosterRD")
+            expected_dates = (date(2026, 4, 12), date(2026, 4, 10), date(2026, 4, 8))
+            for row, prior_rest_day in enumerate(expected_dates, start=2):
+                history.cell(row=row, column=2, value=prior_rest_day)
+            workbook.save(path)
+            workbook.close()
+
+            rest_days = load_last_roster_rest_days(path, date(2026, 4, 13), num_staff=3)
+
+        self.assertEqual(rest_days.dates, expected_dates)
+
     def test_load_last_roster_rest_days_rejects_a_date_on_or_after_day_one(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "roster.xlsx"
