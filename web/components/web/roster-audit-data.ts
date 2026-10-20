@@ -1,0 +1,60 @@
+import type { AuditIssue } from "./roster-audit-types"
+
+export const auditIssues: AuditIssue[] = [
+  {
+    id: "one",
+    type: "coverage",
+    location: "Row 6 \u00b7 Cell D6",
+    staff: "Nur Aisyah",
+    violation: "Only 2 technicians assigned to AM dispensing.",
+    rule: "AM dispensing requires at least 3 technicians on every rostered weekday.",
+  },
+  {
+    id: "two",
+    type: "coverage",
+    location: "Row 11 \u00b7 Cell I11",
+    staff: "Tan Wei Ming",
+    violation: "Closing shift is missing a designated checker.",
+    rule: "Every closing shift must include one checker-qualified technician.",
+  },
+  {
+    id: "three",
+    type: "coverage",
+    location: "Row 15 \u00b7 Cell M15",
+    staff: "Siti Hajar",
+    violation: "Weekend counter coverage falls below the minimum.",
+    rule: "Saturday counter service requires a minimum of 2 technicians.",
+  },
+  {
+    id: "four",
+    type: "rest",
+    location: "Row 6 \u00b7 Cell E6",
+    staff: "Nur Aisyah",
+    violation: "Scheduled after 6 consecutive working days.",
+    rule: "Staff must receive one rest day after a maximum of 6 consecutive days.",
+  },
+  {
+    id: "five",
+    type: "rest",
+    location: "Row 9 \u00b7 Cell L9",
+    staff: "Koh Jia En",
+    violation: "Late shift followed by an early shift the next day.",
+    rule: "A minimum 11-hour rest period is required between rostered shifts.",
+  },
+  {
+    id: "six",
+    type: "rest",
+    location: "Row 12 \u00b7 Cell G12",
+    staff: "Muhammad Firdaus",
+    violation: "No rest day assigned during the public holiday period.",
+    rule: "Each staff member must have one rest day in a public holiday week.",
+  },
+  {
+    id: "seven",
+    type: "rest",
+    location: "Row 16 \u00b7 Cell R16",
+    staff: "Lim Pei Shan",
+    violation: "Scheduled on 7 consecutive days.",
+    rule: "Staff must receive one rest day after a maximum of 6 consecutive days.",
+  },
+]
