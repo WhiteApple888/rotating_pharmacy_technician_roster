@@ -20,13 +20,14 @@ def audit_uploaded_roster(
     start_date: date,
     public_holiday_days: set[int],
     num_staff: int,
+    worksheet_name: str | None = None,
 ) -> tuple[str, list[AuditFailure]]:
     """Audit an uploaded workbook without writing files to the server.
 
     The uploaded workbook uses the same per-person ``lastRosterRD`` history
     sheet as the command-line workflow.
     """
-    roster = load_roster(BytesIO(workbook_bytes), sheet_name=None, num_staff=num_staff)
+    roster = load_roster(BytesIO(workbook_bytes), sheet_name=worksheet_name, num_staff=num_staff)
     prior_rest_days = load_last_roster_rest_days(
         BytesIO(workbook_bytes), start_date, num_staff=num_staff,
     )

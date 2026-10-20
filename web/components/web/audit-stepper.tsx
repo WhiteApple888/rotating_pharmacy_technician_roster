@@ -1,6 +1,6 @@
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { AuditStep } from "./roster-audit-types"
+import type { AuditStep } from "../../app/schema/roster-audit-types"
 
 const steps = ["Upload File", "Key Parameters", "Results"]
 

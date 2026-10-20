@@ -21,7 +21,7 @@ uvicorn roster_audit.api:app --host 0.0.0.0 --port 8000
 ```
 
 `GET /health` returns `{"status":"ok"}` and is suitable for a Render health
-check. `POST /api/v1/audit` accepts `multipart/form-data` with these fields:
+check. `POST /rpt-roster` accepts `multipart/form-data` with these fields:
 
 | Field | Required | Format |
 | --- | --- | --- |
@@ -29,6 +29,7 @@ check. `POST /api/v1/audit` accepts `multipart/form-data` with these fields:
 | `start_date` | Yes | ISO date (`YYYY-MM-DD`) for roster Day 1. |
 | `public_holidays` | No | Repeated values or a comma-separated list of roster days (`1`--`28`) and/or ISO dates. |
 | `num_staff` | No | Positive integer, maximum 100; defaults to 16. The grid begins at row 6. |
+| `worksheet_name` | No | Name of the roster worksheet to audit; defaults to the active worksheet. |
 
 The uploaded workbook must include the `lastRosterRD` worksheet used by the
 CLI. Its column B supplies one previous rest-day date per staff member; the
@@ -37,10 +38,11 @@ API reads `B2` onward for the submitted `num_staff` rows.
 Example request:
 
 ```bash
-curl --request POST "http://localhost:8000/api/v1/audit" \
+curl --request POST "http://localhost:8000/rpt-roster" \
   --form "start_date=2026-04-13" \
   --form "public_holidays=2026-04-17,12" \
   --form "num_staff=16" \
+  --form "worksheet_name=Roster" \
   --form "file=@sample/13Apr-10May_26.xlsx;type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 ```
 
@@ -75,7 +77,7 @@ The interactive OpenAPI contract is available at `/docs`.
 Python 3.11. Set Render's `CORS_ALLOWED_ORIGINS` environment variable to a
 comma-separated allow-list containing the exact Vercel frontend origin, for
 example `https://roster.example.vercel.app`. Local development defaults only to
-`http://localhost:5173`; no wildcard CORS origin is used. Render free instances
+`http://localhost:3000` and `http://localhost:5173`; no wildcard CORS origin is used. Render free instances
 can cold-start after inactivity, so the frontend should surface a retry-friendly
 loading state for an initial request that takes longer than usual.
 

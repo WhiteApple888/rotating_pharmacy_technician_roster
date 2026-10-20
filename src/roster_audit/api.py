@@ -26,7 +26,7 @@ MAX_STAFF = 100 # arbitrary max limit
 
 def cors_origins() -> list[str]:
     """Load explicit browser origins; never default to a wildcard."""
-    supplied = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173")
+    supplied = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173")
     return [origin.strip().rstrip("/") for origin in supplied.split(",") if origin.strip()]
 
 
@@ -36,6 +36,7 @@ class AuditInput(BaseModel):
     start_date: date
     public_holidays: list[str] = Field(default_factory=list)
     num_staff: int = Field(gt=0, le=MAX_STAFF)
+    worksheet_name: str | None = None
 
     @model_validator(mode="after")
     def validate_dates_and_holidays(self) -> "AuditInput":
@@ -90,6 +91,7 @@ async def audit_form(
     start_date: Annotated[date, Form()],
     public_holidays: Annotated[list[str] | None, Form()] = None,
     num_staff: Annotated[int, Form(gt=0, le=MAX_STAFF)] = 16,
+    worksheet_name: Annotated[str | None, Form()] = None,
 ) -> AuditInput:
     """Parse both repeated and comma-separated ``public_holidays`` fields."""
     try:
@@ -97,6 +99,7 @@ async def audit_form(
             start_date=start_date,
             public_holidays=public_holidays or [],
             num_staff=num_staff,
+            worksheet_name=worksheet_name,
         )
     except ValidationError as exc:
         raise RequestValidationError(exc.errors()) from exc
@@ -124,7 +127,7 @@ def custom_openapi() -> dict[str, object]:
     if app.openapi_schema:
         return app.openapi_schema
     schema = get_openapi(title=app.title, version=app.version, description=app.description, routes=app.routes)
-    schema["paths"]["/api/v1/audit"]["post"]["responses"].pop("422", None)
+    schema["paths"]["/rpt-roster"]["post"]["responses"].pop("422", None)
     app.openapi_schema = schema
     return app.openapi_schema
 
@@ -163,7 +166,7 @@ async def health() -> dict[str, str]:
 
 
 @app.post(
-    "/api/v1/audit",
+    "/rpt-roster",
     response_model=AuditResponse,
     responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}, 415: {"model": ErrorResponse}},
     tags=["audit"],
@@ -209,6 +212,7 @@ async def audit(
             start_date=parameters.start_date,
             public_holiday_days=parameters.public_holiday_days,
             num_staff=parameters.num_staff,
+            worksheet_name=parameters.worksheet_name,
         )
     except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile) as exc:
         raise HTTPException(

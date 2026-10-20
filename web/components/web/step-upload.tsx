@@ -15,15 +15,33 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { getWorksheetNames } from "@/lib/workbook-sheets"
 
-export function StepUpload({ onFile }: { onFile: (file: File) => void }) {
+export function StepUpload({
+  onFile,
+}: {
+  onFile: (file: File, worksheetNames: string[]) => void
+}) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [isParsing, setIsParsing] = useState(false)
-  const selectFile = (file?: File) => {
+  const [error, setError] = useState("")
+  const selectFile = async (file?: File) => {
     if (!file || isParsing) return
     setIsParsing(true)
-    window.setTimeout(() => onFile(file), 650)
+    setError("")
+    try {
+      const worksheetNames = await getWorksheetNames(file)
+      onFile(file, worksheetNames)
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The workbook could not be read."
+      )
+    } finally {
+      setIsParsing(false)
+    }
   }
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -75,12 +93,12 @@ export function StepUpload({ onFile }: { onFile: (file: File) => void }) {
               : "Upload Roster Spreadsheet"}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Drag & drop .xlsx file or click to browse
+            Drag & drop an .xlsx file or click to browse
           </p>
           <input
             ref={inputRef}
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx"
             className="sr-only"
             onChange={(event) => selectFile(event.target.files?.[0])}
           />
@@ -94,6 +112,9 @@ export function StepUpload({ onFile }: { onFile: (file: File) => void }) {
               ? "Detecting worksheet names"
               : "Excel files up to 10 MB"}
           </div>
+          {error ? (
+            <p className="mt-3 text-xs text-destructive">{error}</p>
+          ) : null}
         </div>
       </CardContent>
     </Card>

@@ -1,4 +1,4 @@
-import type { AuditIssue } from "./roster-audit-types"
+import { AuditIssue } from "./roster-audit-types";
 
 export const auditIssues: AuditIssue[] = [
   {

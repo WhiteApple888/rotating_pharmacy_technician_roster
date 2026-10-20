@@ -35,18 +35,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { auditSchema, type AuditValues } from "./roster-audit-types"
+import {
+  auditSchema,
+  type AuditValues,
+} from "../../app/schema/roster-audit-types"
 
 type StepParametersProps = {
   fileName: string
+  worksheetNames: string[]
   values: AuditValues
   onValuesChange: (values: AuditValues) => void
   onBack: () => void
-  onAudit: () => void
+  onAudit: (values: AuditValues) => Promise<void>
 }
 
 export function StepParameters({
   fileName,
+  worksheetNames,
   values,
   onValuesChange,
   onBack,
@@ -61,10 +66,14 @@ export function StepParameters({
     resolver: zodResolver(auditSchema),
     values,
   })
-  const submit = (submittedValues: AuditValues) => {
+  const submit = async (submittedValues: AuditValues) => {
     onValuesChange(submittedValues)
     setIsRunning(true)
-    window.setTimeout(onAudit, 950)
+    try {
+      await onAudit(submittedValues)
+    } finally {
+      setIsRunning(false)
+    }
   }
   return (
     <Card className="border-0 shadow-xl ring-1 shadow-slate-200/60 ring-slate-200/70 dark:shadow-none">
@@ -117,8 +126,11 @@ export function StepParameters({
                       <SelectValue placeholder="Select worksheet" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Roster">Roster</SelectItem>
-                      <SelectItem value="April Roster">April Roster</SelectItem>
+                      {worksheetNames.map((worksheetName) => (
+                        <SelectItem key={worksheetName} value={worksheetName}>
+                          {worksheetName}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   {errors.worksheetName && (
@@ -175,62 +187,64 @@ export function StepParameters({
               name="publicHolidays"
               render={({ field }) => (
                 <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Public Holidays
-              </label>
-              <Popover>
-                <PopoverTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full justify-start text-left font-normal"
-                      aria-invalid={Boolean(errors.publicHolidays)}
-                    >
-                      <CalendarDays />
-                      {field.value?.length
-                        ? `${field.value.length} holiday${field.value.length === 1 ? "" : "s"} selected`
-                        : "Select public holidays (optional)"}
-                    </Button>
-                  }
-                />
-                <PopoverContent className="w-auto p-3" align="start">
-                  <div className="mb-2 flex items-center justify-between px-1">
-                    <p className="text-sm font-medium">Public holidays</p>
-                    {field.value?.length ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-muted-foreground"
-                        onClick={() => {
-                          field.onChange(null)
-                          onValuesChange({ ...values, publicHolidays: null })
+                  <label className="text-sm font-medium">Public Holidays</label>
+                  <Popover>
+                    <PopoverTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full justify-start text-left font-normal"
+                          aria-invalid={Boolean(errors.publicHolidays)}
+                        >
+                          <CalendarDays />
+                          {field.value?.length
+                            ? `${field.value.length} holiday${field.value.length === 1 ? "" : "s"} selected`
+                            : "Select public holidays (optional)"}
+                        </Button>
+                      }
+                    />
+                    <PopoverContent className="w-auto p-3" align="start">
+                      <div className="mb-2 flex items-center justify-between px-1">
+                        <p className="text-sm font-medium">Public holidays</p>
+                        {field.value?.length ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-muted-foreground"
+                            onClick={() => {
+                              field.onChange(null)
+                              onValuesChange({
+                                ...values,
+                                publicHolidays: null,
+                              })
+                            }}
+                          >
+                            <X /> Clear
+                          </Button>
+                        ) : null}
+                      </div>
+                      <Calendar
+                        mode="multiple"
+                        selected={field.value ?? []}
+                        onSelect={(dates) => {
+                          const publicHolidays = dates?.length ? dates : null
+                          field.onChange(publicHolidays)
+                          onValuesChange({ ...values, publicHolidays })
                         }}
-                      >
-                        <X /> Clear
-                      </Button>
-                    ) : null}
-                  </div>
-                  <Calendar
-                    mode="multiple"
-                    selected={field.value ?? []}
-                    onSelect={(dates) => {
-                      const publicHolidays = dates?.length ? dates : null
-                      field.onChange(publicHolidays)
-                      onValuesChange({ ...values, publicHolidays })
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-              <p className="text-xs text-muted-foreground">
-                Choose one or more dates, or leave this blank when none apply.
-              </p>
-              {errors.publicHolidays && (
-                <p className="text-xs text-destructive">
-                  {errors.publicHolidays.message}
-                </p>
-              )}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground">
+                    Choose one or more dates, or leave this blank when none
+                    apply.
+                  </p>
+                  {errors.publicHolidays && (
+                    <p className="text-xs text-destructive">
+                      {errors.publicHolidays.message}
+                    </p>
+                  )}
                 </div>
               )}
             />
@@ -239,29 +253,29 @@ export function StepParameters({
               name="staffCount"
               render={({ field }) => (
                 <div className="space-y-2">
-              <label htmlFor="staffCount" className="text-sm font-medium">
-                Staff Count
-              </label>
-              <Input
-                id="staffCount"
-                type="number"
-                min={1}
-                aria-invalid={Boolean(errors.staffCount)}
-                value={field.value}
-                onChange={(event) => {
-                  const staffCount = event.target.valueAsNumber
-                  field.onChange(staffCount)
-                  onValuesChange({ ...values, staffCount })
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                Total technicians expected in the roster.
-              </p>
-              {errors.staffCount && (
-                <p className="text-xs text-destructive">
-                  {errors.staffCount.message}
-                </p>
-              )}
+                  <label htmlFor="staffCount" className="text-sm font-medium">
+                    Staff Count
+                  </label>
+                  <Input
+                    id="staffCount"
+                    type="number"
+                    min={1}
+                    aria-invalid={Boolean(errors.staffCount)}
+                    value={field.value}
+                    onChange={(event) => {
+                      const staffCount = event.target.valueAsNumber
+                      field.onChange(staffCount)
+                      onValuesChange({ ...values, staffCount })
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Total technicians expected in the roster.
+                  </p>
+                  {errors.staffCount && (
+                    <p className="text-xs text-destructive">
+                      {errors.staffCount.message}
+                    </p>
+                  )}
                 </div>
               )}
             />
