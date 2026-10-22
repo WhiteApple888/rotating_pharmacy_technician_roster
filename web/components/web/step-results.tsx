@@ -33,6 +33,7 @@ export function StepResults({
 }) {
   // activeFilter tracks which tab or filter view is currently selected by the user.
   const [activeFilter, setActiveFilter] = useState<IssueFilter>("all")
+  const [openFailureValues, setOpenFailureValues] = useState<string[]>([])
   const filteredFailures = result.failures.filter((failure) => {
     if (activeFilter === "all") return true
     return activeFilter === "daily"
@@ -40,6 +41,7 @@ export function StepResults({
       : failure.day === null
   })
   const issueCountLabel = `${filteredFailures.length} issue${filteredFailures.length === 1 ? "" : "s"}`
+  const failureValues = filteredFailures.map((_, index) => `failure-${index}`)
 
   return (
     <div className="space-y-5">
@@ -95,7 +97,31 @@ export function StepResults({
                 No issues found in this category
               </div>
             ) : (
-              <Accordion multiple className="motion-safe:animate-in motion-safe:duration-200 motion-safe:fade-in-0">
+              <>
+                <div className="flex justify-end gap-2 border-b py-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setOpenFailureValues(failureValues)}
+                    disabled={openFailureValues.length === failureValues.length}
+                  >
+                    Expand all
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setOpenFailureValues([])}
+                    disabled={openFailureValues.length === 0}
+                  >
+                    Collapse all
+                  </Button>
+                </div>
+                <Accordion
+                  multiple
+                  value={openFailureValues}
+                  onValueChange={setOpenFailureValues}
+                  className="motion-safe:animate-in motion-safe:duration-200 motion-safe:fade-in-0"
+                >
                 {filteredFailures.map((failure, index) => (
                   <AccordionItem
                     key={`${failure.category}-${index}`}
@@ -151,7 +177,8 @@ export function StepResults({
                     </AccordionContent>
                   </AccordionItem>
                 ))}
-              </Accordion>
+                </Accordion>
+              </>
             )}
           </TabsContent>
         </Tabs>
