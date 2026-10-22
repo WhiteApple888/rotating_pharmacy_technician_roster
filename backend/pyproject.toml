@@ -3,7 +3,7 @@ name = "rotating-pharmacy-technician-roster"
 version = "0.1.0"
 description = "Audit a four-week pharmacy technician roster stored in Excel."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115,<1.0",
     "openpyxl>=3.1.5",

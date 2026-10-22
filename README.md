@@ -5,7 +5,7 @@ checks 16 staff rows across 28 days, prints any rule failures, and writes an
 Excel audit report. It only reads the source workbook; the original is never
 modified.
 
-The application is the `roster_audit` package under `src/` and requires Python
+The backend application is the `roster_audit` package under `backend/src/` and requires Python
 3.10 or later.
 
 ## HTTP API (FastAPI)
@@ -14,9 +14,10 @@ The project includes a stateless FastAPI application for a separately hosted
 React client. It audits an uploaded workbook entirely in memory and returns
 JSON; it never writes an upload or a report file to the server.
 
-Start it locally after installing the project:
+Start it locally after installing the backend project:
 
 ```powershell
+cd backend
 uvicorn roster_audit.api:app --host 0.0.0.0 --port 8000
 ```
 
@@ -43,7 +44,7 @@ curl --request POST "http://localhost:8000/rpt-roster" \
   --form "public_holidays=2026-04-17,12" \
   --form "num_staff=16" \
   --form "worksheet_name=Roster" \
-  --form "file=@sample/13Apr-10May_26.xlsx;type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  --form "file=@../sample/13Apr-10May_26.xlsx;type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 ```
 
 Successful requests return the stable React contract below. It mirrors every
@@ -73,7 +74,7 @@ The interactive OpenAPI contract is available at `/docs`.
 
 ### Render and Vercel
 
-`render.yaml` deploys the API with `uvicorn`, a `/health` health check, and
+`render.yaml` deploys the API from `backend/` with `uvicorn`, a `/health` health check, and
 Python 3.11. Set Render's `CORS_ALLOWED_ORIGINS` environment variable to a
 comma-separated allow-list containing the exact Vercel frontend origin, for
 example `https://roster.example.vercel.app`. Local development defaults only to
@@ -83,10 +84,11 @@ loading state for an initial request that takes longer than usual.
 
 ## Installation
 
-From the repository root, create an environment if desired, then install the
+From the backend directory, create an environment if desired, then install the
 project and its dependencies:
 
 ```powershell
+cd backend
 python -m pip install -e .
 ```
 
@@ -114,7 +116,7 @@ Audit the included roster, treating roster Day 1 as a public holiday and
 writing the results to `roster_audit.xlsx`:
 
 ```powershell
-roster-audit .\13Apr-10May_26.xlsx --start_date 2026-04-13 --ph 1 --report .\roster_audit.xlsx
+roster-audit ..\sample\13Apr-10May_26.xlsx --start_date 2026-04-13 --ph 1 --report .\roster_audit.xlsx
 ```
 
 Public holidays can also be supplied as ISO dates. The following command uses
@@ -122,7 +124,7 @@ Public holidays can also be supplied as ISO dates. The following command uses
 holidays:
 
 ```powershell
-roster-audit .\13Apr-10May_26.xlsx --start_date 2026-04-13 --ph 2026-04-17,12
+roster-audit ..\sample\13Apr-10May_26.xlsx --start_date 2026-04-13 --ph 2026-04-17,12
 ```
 
 Example console output:
@@ -154,12 +156,12 @@ Rest-day-spacing and daily-coverage failures include roster dates whenever
 
 | Path | Purpose |
 | --- | --- |
-| `src/roster_audit/individual_staff_constraints.py` | Domain types and staff-level audit constraints. |
-| `src/roster_audit/daily_constraints.py` | Daily coverage policy tables and audit rules. |
-| `src/roster_audit/workbook.py`, `report.py` | Excel input and audit-report output. |
-| `src/roster_audit/service.py`, `cli.py` | Audit workflow and command-line interface. |
-| `tests/` | Fast unit tests for parsing and audit policy behaviour. |
-| `pyproject.toml` | Dependency and command-line entry-point configuration. |
+| `backend/src/roster_audit/individual_staff_constraints.py` | Domain types and staff-level audit constraints. |
+| `backend/src/roster_audit/daily_constraints.py` | Daily coverage policy tables and audit rules. |
+| `backend/src/roster_audit/workbook.py`, `report.py` | Excel input and audit-report output. |
+| `backend/src/roster_audit/service.py`, `cli.py` | Audit workflow and command-line interface. |
+| `backend/tests/` | Fast unit tests for parsing and audit policy behaviour. |
+| `backend/pyproject.toml` | Dependency and command-line entry-point configuration. |
 | `*.xlsx` | Example source roster and locally generated reports. |
 
 ## Policy changes
@@ -174,6 +176,7 @@ Add or update a focused test whenever a policy changes.
 After installing the project, run the test suite with the standard library:
 
 ```powershell
+cd backend
 python -m unittest discover -s tests -v
 ```
 
@@ -181,6 +184,7 @@ If you have not installed the project in the active environment, run the same
 command with `PYTHONPATH` pointed at `src`:
 
 ```powershell
+cd backend
 $env:PYTHONPATH = "src"
 python -m unittest discover -s tests -v
 ```

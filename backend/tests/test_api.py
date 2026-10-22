@@ -20,7 +20,8 @@ class ApiTests(unittest.TestCase):
             public_holidays=["2026-04-17,12"],
             num_staff=16,
         ))
-        workbook = (Path("sample") / "13Apr-10May_26.xlsx").read_bytes()
+        repository_root = Path(__file__).resolve().parents[2]
+        workbook = (repository_root / "sample" / "13Apr-10May_26.xlsx").read_bytes()
         upload = UploadFile(
             BytesIO(workbook),
             filename="roster.xlsx",
