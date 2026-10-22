@@ -23,4 +23,4 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.vercel]
-entrypoint = "roster_audit.api:app"
+entrypoint = "src.roster_audit.api:app"
