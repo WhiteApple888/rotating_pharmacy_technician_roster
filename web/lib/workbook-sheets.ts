@@ -1,6 +1,9 @@
-const CENTRAL_DIRECTORY_SIGNATURE = 0x02014b50
-const END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x06054b50
-const LOCAL_FILE_HEADER_SIGNATURE = 0x04034b50
+/*Allows a web browser to read the sheet names (tabs) from an Excel file (.xlsx) directly in the user's browser, 
+without sending the file to a server.*/
+
+const CENTRAL_DIRECTORY_SIGNATURE = 0x02014b50 // The start of an entry inside the ZIP's Central Directory (the "Table of Contents").
+const END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x06054b50 // (EOCD) record at the end of the ZIP file.
+const LOCAL_FILE_HEADER_SIGNATURE = 0x04034b50 //The start of an individual file's raw data block stored in the archive.
 
 function findEndOfCentralDirectory(bytes: Uint8Array) {
   for (

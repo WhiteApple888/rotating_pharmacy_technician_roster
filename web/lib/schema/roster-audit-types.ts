@@ -4,7 +4,7 @@ export const auditSchema = z.object({
   worksheetName: z.string().min(1, "Choose a worksheet."),
   startDate: z.date({ error: "Choose a start date." }),
   publicHolidays: z.array(z.date()).nullable(),
-  staffCount: z.number().int().min(1, "Enter at least one staff member."),
+  staffCount: z.number("Please enter a valid whole number.").int("Please enter a valid whole number.").min(1, "Enter at least one staff member."),
 })
 
 export type AuditValues = z.infer<typeof auditSchema>

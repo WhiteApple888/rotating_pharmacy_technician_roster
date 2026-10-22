@@ -21,7 +21,7 @@ from .parsing import parse_ph_days
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-MAX_STAFF = 100 # arbitrary max limit
+MAX_STAFF = 30 # arbitrary max limit
 
 
 def cors_origins() -> list[str]:

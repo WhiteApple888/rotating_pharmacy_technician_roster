@@ -38,7 +38,7 @@ import {
 import {
   auditSchema,
   type AuditValues,
-} from "../../app/schema/roster-audit-types"
+} from "../../lib/schema/roster-audit-types"
 
 type StepParametersProps = {
   fileName: string
@@ -75,18 +75,18 @@ export function StepParameters({
       setIsRunning(false)
     }
   }
+
+  const CURRENT_YEAR = new Date().getFullYear()
+  const START_MONTH = new Date(CURRENT_YEAR - 5, 0)
+  const END_MONTH = new Date(CURRENT_YEAR + 5, 11)
+
   return (
     <Card className="border-0 shadow-xl ring-1 shadow-slate-200/60 ring-slate-200/70 dark:shadow-none">
       <CardHeader className="border-b px-7 pt-7 sm:px-9">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-          <div>
-            <CardTitle className="text-2xl tracking-tight">
-              Audit parameters
-            </CardTitle>
-            <CardDescription className="mt-1">
-              Fine-tune how the roster should be checked.
-            </CardDescription>
-          </div>
+          <CardTitle className="text-2xl tracking-tight">
+            Key parameters
+          </CardTitle>
           <Button variant="outline" size="sm" onClick={onBack}>
             <RefreshCw /> Change File
           </Button>
@@ -105,14 +105,14 @@ export function StepParameters({
           </span>
         </div>
       </CardHeader>
-      <CardContent className="px-7 py-7 sm:px-9">
+      <CardContent className="px-6 py-4 sm:px-9">
         <form onSubmit={handleSubmit(submit)} className="space-y-5">
           <div className="grid gap-5 sm:grid-cols-2">
             <Controller
               control={control}
               name="worksheetName"
               render={({ field }) => (
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <label className="text-sm font-medium">Worksheet Name</label>
                   <Select
                     onValueChange={(value) => {
@@ -164,6 +164,10 @@ export function StepParameters({
                       <Calendar
                         mode="single"
                         selected={field.value}
+                        captionLayout="dropdown"
+                        startMonth={START_MONTH}
+                        endMonth={END_MONTH}
+                        autoFocus
                         onSelect={(date) => {
                           if (!date) return
                           field.onChange(date)
@@ -186,7 +190,7 @@ export function StepParameters({
               control={control}
               name="publicHolidays"
               render={({ field }) => (
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <label className="text-sm font-medium">Public Holidays</label>
                   <Popover>
                     <PopoverTrigger
@@ -227,6 +231,10 @@ export function StepParameters({
                       </div>
                       <Calendar
                         mode="multiple"
+                        captionLayout="dropdown"
+                        startMonth={START_MONTH}
+                        endMonth={END_MONTH}
+                        autoFocus
                         selected={field.value ?? []}
                         onSelect={(dates) => {
                           const publicHolidays = dates?.length ? dates : null
@@ -237,8 +245,7 @@ export function StepParameters({
                     </PopoverContent>
                   </Popover>
                   <p className="text-xs text-muted-foreground">
-                    Choose one or more dates, or leave this blank when none
-                    apply.
+                    Choose one or more PH, or leave blank when none apply.
                   </p>
                   {errors.publicHolidays && (
                     <p className="text-xs text-destructive">
@@ -252,20 +259,21 @@ export function StepParameters({
               control={control}
               name="staffCount"
               render={({ field }) => (
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <label htmlFor="staffCount" className="text-sm font-medium">
                     Staff Count
                   </label>
                   <Input
                     id="staffCount"
                     type="number"
-                    min={1}
                     aria-invalid={Boolean(errors.staffCount)}
                     value={field.value}
                     onChange={(event) => {
                       const staffCount = event.target.valueAsNumber
-                      field.onChange(staffCount)
-                      onValuesChange({ ...values, staffCount })
+                      field.onChange(Number.isNaN(staffCount) ? "" : staffCount)
+                      if (Number.isFinite(staffCount)) {
+                        onValuesChange({ ...values, staffCount })
+                      }
                     }}
                   />
                   <p className="text-xs text-muted-foreground">

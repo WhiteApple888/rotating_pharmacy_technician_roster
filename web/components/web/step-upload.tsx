@@ -104,9 +104,9 @@ export function StepUpload({
           />
           <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
             {isParsing ? (
-              <LoaderCircle className="size-3.5 animate-spin" />
+              <LoaderCircle className="size-8 animate-spin" />
             ) : (
-              <UploadCloud className="size-3.5" />
+              <UploadCloud className="size-8" />
             )}
             {isParsing
               ? "Detecting worksheet names"

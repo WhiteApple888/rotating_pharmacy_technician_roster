@@ -92,6 +92,7 @@ def audit_coverage_rule(rule: CoverageRule, shifts: tuple[str, ...], day: int, w
         category="Daily coverage", day=day,
         message=(f"{day_description} has {actual} {rule.label} shifts; required "
                  f"{rule.comparison} {rule.target}."),
+        roster_date=roster_date,
     )
 
 def audit_daily_rules(roster: Roster, ph_days: set[int], start_date: date | None = None,) -> list[AuditFailure]:

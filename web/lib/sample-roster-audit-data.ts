@@ -1,4 +1,5 @@
-import { AuditIssue } from "./roster-audit-types";
+/* Sample Data Used During Development of Frontend */
+import { AuditIssue } from "./schema/roster-audit-types"
 
 export const auditIssues: AuditIssue[] = [
   {

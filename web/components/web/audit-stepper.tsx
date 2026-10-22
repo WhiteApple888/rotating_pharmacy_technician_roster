@@ -1,6 +1,6 @@
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { AuditStep } from "../../app/schema/roster-audit-types"
+import type { AuditStep } from "../../lib/schema/roster-audit-types"
 
 const steps = ["Upload File", "Key Parameters", "Results"]
 
@@ -41,7 +41,8 @@ export function AuditStepper({
                   complete || active
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-border bg-background text-muted-foreground",
-                  complete && "cursor-pointer hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  complete &&
+                    "cursor-pointer hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 )}
               >
                 {complete ? <Check className="size-4" /> : position}
@@ -53,7 +54,8 @@ export function AuditStepper({
                 className={cn(
                   "text-xs font-medium sm:text-sm",
                   active ? "text-foreground" : "text-muted-foreground",
-                  complete && "cursor-pointer hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  complete &&
+                    "cursor-pointer hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 )}
               >
                 {label}

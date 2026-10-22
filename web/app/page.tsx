@@ -7,20 +7,22 @@ import { AuditStepper } from "@/components/web/audit-stepper"
 import { StepParameters } from "@/components/web/step-parameters"
 import { StepResults } from "@/components/web/step-results"
 import { StepUpload } from "@/components/web/step-upload"
-import { runAudit, type AuditResponse } from "@/lib/audit-api"
-import type { AuditStep } from "@/app/schema/roster-audit-types"
-import type { AuditValues } from "@/app/schema/roster-audit-types"
+import { runAudit } from "@/app/actions"
+import type { AuditResponse } from "@/lib/schema/audit-api"
+import type { AuditStep } from "@/lib/schema/roster-audit-types"
+import type { AuditValues } from "@/lib/schema/roster-audit-types"
 
 export default function Page() {
-  const [step, setStep] = useState<AuditStep>(1)
-  const [fileName, setFileName] = useState("")
-  const [file, setFile] = useState<File | null>(null)
-  const [worksheetNames, setWorksheetNames] = useState<string[]>([])
-  const [result, setResult] = useState<AuditResponse | null>(null)
-  const [auditError, setAuditError] = useState("")
+  const [step, setStep] = useState<AuditStep>(1) // Tracks current wizard step (1: Upload, 2: Parameters, 3: Results).
+  const [fileName, setFileName] = useState("") // Holds the uploaded raw filename.
+  const [file, setFile] = useState<File | null>(null) // Holds the uploaded file object.
+  const [worksheetNames, setWorksheetNames] = useState<string[]>([]) // List of sheet names extracted from the uploaded Excel/spreadsheet file.
+  const [result, setResult] = useState<AuditResponse | null>(null) // Holds the API output after processing
+  const [auditError, setAuditError] = useState("") // Stores error messages if the runAudit request fails.
   const [parameters, setParameters] = useState<AuditValues>({
+    // Stores user-configured audit setting for persistence
     worksheetName: "Roster",
-    startDate: new Date(2026, 3, 13),
+    startDate: new Date(),
     publicHolidays: null,
     staffCount: 16,
   })
@@ -69,7 +71,12 @@ export default function Page() {
                   if (!file) return
                   try {
                     setAuditError("")
-                    setResult(await runAudit(file, submittedValues))
+                    const auditResult = await runAudit(file, submittedValues)
+                    if (!auditResult.ok) {
+                      setAuditError(auditResult.error)
+                      return
+                    }
+                    setResult(auditResult.result)
                     setStep(3)
                   } catch (reason) {
                     setAuditError(
