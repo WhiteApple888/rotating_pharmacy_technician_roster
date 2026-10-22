@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { format } from "date-fns"
 import { AnimatePresence, motion } from "motion/react"
 import { AuditHeader } from "@/components/web/audit-header"
 import { AuditStepper } from "@/components/web/audit-stepper"
@@ -71,7 +72,14 @@ export default function Page() {
                   if (!file) return
                   try {
                     setAuditError("")
-                    const auditResult = await runAudit(file, submittedValues)
+                    const auditResult = await runAudit(file, {
+                      worksheetName: submittedValues.worksheetName,
+                      startDate: format(submittedValues.startDate, "yyyy-MM-dd"),
+                      publicHolidays: (submittedValues.publicHolidays ?? []).map(
+                        (date) => format(date, "yyyy-MM-dd")
+                      ),
+                      staffCount: submittedValues.staffCount,
+                    })
                     if (!auditResult.ok) {
                       setAuditError(auditResult.error)
                       return

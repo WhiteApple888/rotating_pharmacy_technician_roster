@@ -1,190 +1,92 @@
-# Pharmacy technician roster auditor
+# Pharmacy Technician Roster Auditor
 
-Audit a fixed four-week pharmacy technician roster stored in Excel. The tool
-checks 16 staff rows across 28 days, prints any rule failures, and writes an
-Excel audit report. It only reads the source workbook; the original is never
-modified.
+A web application and Python CLI for auditing four-week pharmacy technician rosters in Excel. Upload a workbook through the Next.js interface or run the auditor locally; both use the same FastAPI-backed validation rules.
 
-The backend application is the `roster_audit` package under `backend/src/` and requires Python
-3.10 or later.
+The auditor reads the source workbook without modifying it. The CLI additionally produces an Excel report with `Summary` and `Failures` sheets.
 
-## HTTP API (FastAPI)
+## What it checks
 
-The project includes a stateless FastAPI application for a separately hosted
-React client. It audits an uploaded workbook entirely in memory and returns
-JSON; it never writes an upload or a report file to the server.
+- Four-week working hours and weekly rest-day requirements
+- Rest-day spacing, including the boundary from the previous roster
+- Night-shift and next-day-off sequencing
+- Daily staffing coverage, with separate public-holiday rules
 
-Start it locally after installing the backend project:
+The default roster has 16 staff across 28 days. The API supports 1–30 staff; the roster grid starts at worksheet row 6.
 
-```powershell
-cd backend
-uvicorn roster_audit.api:app --host 0.0.0.0 --port 8000
-```
+## Requirements
 
-`GET /health` returns `{"status":"ok"}` and is suitable for a Render health
-check. `POST /rpt-roster` accepts `multipart/form-data` with these fields:
+- Python 3.12
+- Node.js 20+ and pnpm (for the web client)
 
-| Field | Required | Format |
-| --- | --- | --- |
-| `file` | Yes | `.xlsx` file with MIME type `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`; maximum 10 MB. |
-| `start_date` | Yes | ISO date (`YYYY-MM-DD`) for roster Day 1. |
-| `public_holidays` | No | Repeated values or a comma-separated list of roster days (`1`--`28`) and/or ISO dates. |
-| `num_staff` | No | Positive integer, maximum 100; defaults to 16. The grid begins at row 6. |
-| `worksheet_name` | No | Name of the roster worksheet to audit; defaults to the active worksheet. |
+## Run locally
 
-The uploaded workbook must include the `lastRosterRD` worksheet used by the
-CLI. Its column B supplies one previous rest-day date per staff member; the
-API reads `B2` onward for the submitted `num_staff` rows.
-
-Example request:
-
-```bash
-curl --request POST "http://localhost:8000/rpt-roster" \
-  --form "start_date=2026-04-13" \
-  --form "public_holidays=2026-04-17,12" \
-  --form "num_staff=16" \
-  --form "worksheet_name=Roster" \
-  --form "file=@../sample/13Apr-10May_26.xlsx;type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-```
-
-Successful requests return the stable React contract below. It mirrors every
-field of `AuditFailure`; dates are ISO strings or `null`.
-
-```json
-{
-  "status": "FAIL",
-  "passed": false,
-  "failure_count": 1,
-  "worksheet": "Roster",
-  "failures": [{
-    "category": "Daily coverage",
-    "message": "...",
-    "staff_row": null,
-    "day": 1,
-    "source_cell": null,
-    "roster_date": "2026-04-13"
-  }]
-}
-```
-
-Bad form input or an unreadable workbook returns HTTP 400 as
-`{"error":{"code":"...","message":"...","details":[...]}}`. Invalid
-file extension or MIME type returns 415, and an upload over 10 MB returns 413.
-The interactive OpenAPI contract is available at `/docs`.
-
-### Render and Vercel
-
-`render.yaml` deploys the API from `backend/` with `uvicorn`, a `/health` health check, and
-Python 3.11. Set Render's `CORS_ALLOWED_ORIGINS` environment variable to a
-comma-separated allow-list containing the exact Vercel frontend origin, for
-example `https://roster.example.vercel.app`. Local development defaults only to
-`http://localhost:3000` and `http://localhost:5173`; no wildcard CORS origin is used. Render free instances
-can cold-start after inactivity, so the frontend should surface a retry-friendly
-loading state for an initial request that takes longer than usual.
-
-## Installation
-
-From the backend directory, create an environment if desired, then install the
-project and its dependencies:
+Start the API:
 
 ```powershell
 cd backend
 python -m pip install -e .
+uvicorn roster_audit.api:app --reload --port 8000
 ```
 
-## Usage
+In another terminal, start the web client:
 
 ```powershell
-roster-audit ROSTER.xlsx [--sheet SHEET] [--start_date YYYY-MM-DD] [--ph DAYS] [--report REPORT.xlsx]
+cd web
+Copy-Item .env.example .env.local
+pnpm install
+pnpm dev
 ```
 
-| Argument | Description |
-| --- | --- |
-| `ROSTER.xlsx` | Required source workbook. It must be an `.xlsx` file. |
-| `--sheet SHEET` | Worksheet to audit. Defaults to the active worksheet. |
-| `--start_date YYYY-MM-DD` | Calendar date for roster Day 1. Required for `lastRosterRD`, rest-day-spacing, and ISO public-holiday validation. |
-| `--ph DAYS` | Public-holiday roster days or ISO dates. Accepts comma-separated values and can be repeated. |
-| `--report REPORT.xlsx` | Destination for the audit workbook. Defaults to `<source-name>_audit.xlsx` beside the source file. |
+The client is available at `http://localhost:3000`, and the API documentation is at `http://localhost:8000/docs`. Set `AUDIT_API_URL` (server-side) or `NEXT_PUBLIC_AUDIT_API_URL` in `web/.env.local` if the API runs elsewhere.
 
-The command exits with status `0` when the roster passes and `1` when one or
-more constraints fail. In both cases, an audit report is written unless an
-input or file error prevents it.
-
-## Sample
-
-Audit the included roster, treating roster Day 1 as a public holiday and
-writing the results to `roster_audit.xlsx`:
+## CLI
 
 ```powershell
+cd backend
 roster-audit ..\sample\13Apr-10May_26.xlsx --start_date 2026-04-13 --ph 1 --report .\roster_audit.xlsx
 ```
 
-Public holidays can also be supplied as ISO dates. The following command uses
-13 April 2026 as roster Day 1 and marks both Day 5 and Day 12 as public
-holidays:
+```text
+roster-audit ROSTER.xlsx --start_date YYYY-MM-DD [--sheet SHEET] [--ph DAYS] [--report REPORT.xlsx]
+```
+
+`--ph` accepts comma-separated roster-day numbers and/or ISO dates and can be repeated. The command exits with `0` for a passing roster and `1` when validation failures are found.
+
+## Workbook expectations
+
+The selected worksheet contains the 28-day shift grid, beginning at row 6. A `lastRosterRD` worksheet is also required: column B, beginning at `B2`, must provide the previous rest-day date for each staff member, in roster order. Dates must be before Day 1.
+
+## API
+
+`POST /rpt-roster` accepts a multipart `.xlsx` upload (maximum 10 MB) plus:
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `file` | Yes | Excel workbook (`.xlsx`) |
+| `start_date` | Yes | Roster Day 1 (`YYYY-MM-DD`) |
+| `public_holidays` | No | Repeated or comma-separated roster days and/or ISO dates |
+| `num_staff` | No | Number of staff; defaults to 16 |
+| `worksheet_name` | No | Worksheet to audit; defaults to the active sheet |
+
+Responses include the pass/fail status, worksheet name, failure count, and structured failures. `GET /health` returns service readiness. See the interactive contract at `/docs`.
+
+## Validation and testing
 
 ```powershell
-roster-audit ..\sample\13Apr-10May_26.xlsx --start_date 2026-04-13 --ph 2026-04-17,12
+cd backend
+python -m unittest discover -s tests -v
+
+cd ..\web
+pnpm typecheck
+pnpm lint
 ```
 
-Example console output:
-
-```text
-STATUS: FAIL
-Fail: Staff in Row 6 worked 156 hours across the 4-week period; required 160.
-Audit report: roster_audit.xlsx
-```
-
-The report contains a `Summary` sheet with the result and input details, and a
-`Failures` sheet listing each broken constraint. A passing roster prints
-`STATUS: PASS` and has no rows in `Failures`.
-
-## Rest-day history checks
-
-The source workbook must contain a `lastRosterRD` sheet. Starting at `B2`, one
-cell maps in order to each submitted roster staff row, starting at row 6. Each
-cell must contain an Excel date strictly before roster Day 1. The auditor uses
-each staff member's historical RD to check the Day 1 boundary. It also checks
-rest-day gaps within the roster and work stretches of 12 or more days that
-continue to roster Day 28.
-
-Rest-day-spacing and daily-coverage failures include roster dates whenever
-`--start_date` is provided. The Excel report's `Failures` sheet includes a
-`roster_date` column alongside the staff row and roster day for easier review.
-
-## Repository layout
+## Project structure
 
 | Path | Purpose |
 | --- | --- |
-| `backend/src/roster_audit/individual_staff_constraints.py` | Domain types and staff-level audit constraints. |
-| `backend/src/roster_audit/daily_constraints.py` | Daily coverage policy tables and audit rules. |
-| `backend/src/roster_audit/workbook.py`, `report.py` | Excel input and audit-report output. |
-| `backend/src/roster_audit/service.py`, `cli.py` | Audit workflow and command-line interface. |
-| `backend/tests/` | Fast unit tests for parsing and audit policy behaviour. |
-| `backend/pyproject.toml` | Dependency and command-line entry-point configuration. |
-| `*.xlsx` | Example source roster and locally generated reports. |
+| `backend/` | FastAPI service, CLI, Excel parsing, audit rules, and tests |
+| `web/` | Next.js upload and results interface |
+| `sample/` | Example roster workbooks |
 
-## Policy changes
-
-`individual_staff_constraints.py` is the single source of truth for shift
-codes, hours, rest days, and staff-level rules. `daily_constraints.py` contains
-the `NORMAL_COVERAGE_RULES` and `PH_COVERAGE_RULES` tables for daily coverage.
-Add or update a focused test whenever a policy changes.
-
-## Verification
-
-After installing the project, run the test suite with the standard library:
-
-```powershell
-cd backend
-python -m unittest discover -s tests -v
-```
-
-If you have not installed the project in the active environment, run the same
-command with `PYTHONPATH` pointed at `src`:
-
-```powershell
-cd backend
-$env:PYTHONPATH = "src"
-python -m unittest discover -s tests -v
-```
+Policy definitions live in `backend/src/roster_audit/individual_staff_constraints.py` and `daily_constraints.py`. Update the corresponding tests whenever a policy changes.
