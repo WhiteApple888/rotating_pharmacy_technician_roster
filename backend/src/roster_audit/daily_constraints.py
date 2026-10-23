@@ -49,7 +49,7 @@ NORMAL_COVERAGE_RULES = (
     CoverageRule("D/P/W", DPW_CODES, 3, "exactly", WED_SUN),
     CoverageRule("Z1/Y/Z", Z1_Y_Z_CODES, 5, "at least", frozenset({"Saturday"})),
     CoverageRule("Z1/Y", Z1_Y_CODES, 4, "at least", frozenset({"Sunday"})),
-    CoverageRule("Y", frozenset({"Z"}), 1, "exactly", frozenset({"Saturday"})),
+    CoverageRule("Z", frozenset({"Z"}), 1, "exactly", frozenset({"Saturday"})),
     CoverageRule("Y", frozenset({"Y"}), 1, "exactly", frozenset({"Saturday"})),
     CoverageRule("Y", frozenset({"Y"}), 2, "exactly", frozenset({"Sunday"})),
     CoverageRule("XE/XE1", XE_XE1_CODES, 2, "exactly", frozenset({"Sunday"})),

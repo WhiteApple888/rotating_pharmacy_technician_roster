@@ -67,7 +67,7 @@ class IndividualConstraintTests(unittest.TestCase):
         self.assertEqual([failure.message[-7:] for failure in failures], ["Week 1.", "Week 2."])
 
     def test_rest_day_spacing_reports_gaps_larger_than_twelve_days(self) -> None:
-        schedule = StaffSchedule(6, ("RD",) + ("XE1",) * 12 + ("RD",) + ("XE1",) * 14)
+        schedule = StaffSchedule(6, ("RD",) + ("Z1",) * 13 + ("RD",) + ("XE1",) * 13)
 
         failures = audit_rest_day_spacing(schedule, start_date=date(2026, 4, 13))
 
@@ -78,13 +78,13 @@ class IndividualConstraintTests(unittest.TestCase):
         schedule = StaffSchedule(6, ("XE1",) * 12 + ("RD",) + ("RD",) * 15)
 
         failures = audit_rest_day_spacing(
-            schedule, date(2026, 4, 12), date(2026, 4, 13), include_schedule_gaps=False,
+            schedule, date(2026, 4, 11), date(2026, 4, 13), include_schedule_gaps=False,
         )
 
         self.assertEqual(len(failures), 1)
         self.assertEqual(failures[0].day, 13)
         self.assertIn("25 April 2026", failures[0].message)
-        self.assertIn("12 consecutive working days", failures[0].message)
+        self.assertIn("13 consecutive working days", failures[0].message)
 
     def test_rest_day_spacing_flags_a_roster_that_ends_with_more_than_twelve_work_days(self) -> None:
         schedule = StaffSchedule(6, ("RD",) + ("XE1",) * 27)

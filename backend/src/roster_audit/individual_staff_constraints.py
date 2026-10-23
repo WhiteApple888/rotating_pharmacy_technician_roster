@@ -97,7 +97,7 @@ def audit_rest_day_spacing(
     if previous_rest_day is not None and start_date is not None and rest_days:
         first_rest_day = start_date + timedelta(days=rest_days[0] - 1) # Converts a 1-based index (e.g., "Day 1", "Day 5") into an actual calendar date
         elapsed_days = (first_rest_day - previous_rest_day).days
-        if elapsed_days > MAX_REST_DAY_GAP:
+        if elapsed_days - 1 > MAX_REST_DAY_GAP:
             failures.append(AuditFailure(
                 category="Rest day spacing",
                 staff_row=schedule.excel_row,
@@ -112,7 +112,7 @@ def audit_rest_day_spacing(
     # A gap larger than the configured maximum between RD dates violates the spacing policy.
     if include_schedule_gaps:
         for earlier, later in zip(rest_days, rest_days[1:]):
-            if later - earlier > MAX_REST_DAY_GAP:
+            if later - earlier - 1 > MAX_REST_DAY_GAP:
                 earlier_date = start_date + timedelta(days=earlier - 1) if start_date else None
                 later_date = start_date + timedelta(days=later - 1) if start_date else None
                 rest_day_details = (
@@ -128,7 +128,7 @@ def audit_rest_day_spacing(
                     day=later,
                     roster_date=later_date,
                     message=(f"Fail: Staff in Row {schedule.excel_row} has rest days on "
-                             f"{rest_day_details} ({later - earlier} days apart; "
+                             f"{rest_day_details} ({later - earlier - 1} days apart; "
                              f"maximum is {MAX_REST_DAY_GAP})."),
                 ))
 
