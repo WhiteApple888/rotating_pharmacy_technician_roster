@@ -47,7 +47,7 @@ export default function Page() {
           >
             {step === 1 && (
               <StepUpload
-                onFile={(uploadedFile, sheets) => {
+                onConfirm={(uploadedFile, sheets) => {
                   setFile(uploadedFile)
                   setWorksheetNames(sheets)
                   setParameters((current) => ({
@@ -74,10 +74,13 @@ export default function Page() {
                     setAuditError("")
                     const auditResult = await runAudit(file, {
                       worksheetName: submittedValues.worksheetName,
-                      startDate: format(submittedValues.startDate, "yyyy-MM-dd"),
-                      publicHolidays: (submittedValues.publicHolidays ?? []).map(
-                        (date) => format(date, "yyyy-MM-dd")
+                      startDate: format(
+                        submittedValues.startDate,
+                        "yyyy-MM-dd"
                       ),
+                      publicHolidays: (
+                        submittedValues.publicHolidays ?? []
+                      ).map((date) => format(date, "yyyy-MM-dd")),
                       staffCount: submittedValues.staffCount,
                     })
                     if (!auditResult.ok) {
