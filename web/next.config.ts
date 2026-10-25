@@ -1,7 +1,8 @@
 import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
-    experimental: {
+  experimental: {
+    agentUpgrade: "security",
     serverActions: {
       bodySizeLimit: "1mb",
     },
