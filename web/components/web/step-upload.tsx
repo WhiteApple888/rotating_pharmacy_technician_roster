@@ -151,8 +151,8 @@ export function StepUpload({
       setActiveFile(file)
       setWorksheetNames(sheets)
       setRowCounts({
-        active: Math.max(0, (counts[0] ?? 0)),
-        last: Math.max(0, (counts[1] ?? 0)),
+        active: Math.max(0, counts[0] ?? 0),
+        last: Math.max(0, counts[1] ?? 0),
       })
       setSource("upload")
     } catch (reason) {
@@ -222,15 +222,19 @@ export function StepUpload({
     return (
       <Card className="border-0 shadow-xl ring-1 shadow-slate-200/60 ring-slate-200/70 dark:shadow-none">
         <CardHeader className="border-b px-7 pt-7 sm:px-9">
-          <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <CheckCircle2 className="size-6" />
+          <div className="flex items-center gap-3.5 sm:gap-4">
+            <div className="flex size-13 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <CheckCircle2 className="size-8" />
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="text-2xl tracking-tight">
+                Review your roster input
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Confirm the file, source, worksheets and rows
+              </CardDescription>
+            </div>
           </div>
-          <CardTitle className="mt-3 text-2xl tracking-tight">
-            Review your roster input
-          </CardTitle>
-          <CardDescription>
-            Confirm the file, source, worksheets and rows
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5 px-7 py-7 sm:px-9">
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
@@ -253,7 +257,7 @@ export function StepUpload({
               size="lg"
               onClick={() => onConfirm(activeFile, worksheetNames)}
             >
-              Confirm and continue <ArrowRight />
+              Confirm <ArrowRight />
             </Button>
           </div>
         </CardContent>
@@ -377,7 +381,7 @@ export function StepUpload({
               </TabsContent>
             </Tabs>
             <div className="py-2">
-              <p className="text-xs text-muted-foreground my-1">
+              <p className="my-1 text-xs text-muted-foreground">
                 Paste an entire worksheet directly from Excel or Google Sheets.
               </p>
               <p className="text-xs text-muted-foreground">
