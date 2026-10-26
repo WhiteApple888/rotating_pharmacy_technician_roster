@@ -57,9 +57,18 @@ const stringColumn = createTextColumn<string>({ deletedValue: "" })
 
 /** Convert pasted DD/MM/YYYY or YYYY-MM-DD values into an Excel date serial. */
 const excelDateSerial = (value: unknown) => {
-  const text = String(value ?? "")
+  const text = String(value ?? "").trim()
+  if (!text) return ""
+
+  // Excel may copy a General-formatted date as its raw serial, e.g. "46124".
+  if (/^\d+(?:\.\d+)?$/.test(text)) {
+    const serial = Number(text)
+    if (Number.isFinite(serial) && serial > 0 && serial < 100_000) {
+      return serial
+    }
+  }
+
   const match = text
-    .trim()
     .match(/^(?:(\d{1,2})\/(\d{1,2})\/(\d{4})|(\d{4})-(\d{1,2})-(\d{1,2}))$/)
   if (!match) return value ?? ""
 
@@ -168,7 +177,10 @@ export function StepUpload({
 
   const buildGridFile = () => {
     const workbook = XLSX.utils.book_new()
-    const activeData = activeRows.filter(hasValues)
+    const activeData = [
+      ...activeRows.slice(0, 5),
+      ...activeRows.slice(5).filter(hasValues),
+    ]
     const lastData = lastRows.filter(hasValues)
     const toWorksheet = (
       rows: SpreadsheetRow[],
