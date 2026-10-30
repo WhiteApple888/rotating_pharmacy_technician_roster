@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import zipfile
 from datetime import date
+from io import BytesIO
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
@@ -13,10 +14,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from .api_service import audit_uploaded_roster
 from .individual_staff_constraints import AuditFailure
+from .optimizer import NoFeasibleRosterError, optimize_full_roster
 from .parsing import parse_ph_days
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -77,6 +80,24 @@ class AuditResponse(BaseModel):
     failures: list[AuditFailureResponse]
 
 
+class OptimizeInput(BaseModel):
+    """Validated optimizer parameters after multipart form parsing."""
+
+    start_date: date
+    public_holidays: list[str] = Field(default_factory=list)
+    worksheet_name: str | None = None
+    max_time_seconds: float = Field(default=60.0, gt=0, le=120)
+
+    @model_validator(mode="after")
+    def validate_holidays(self) -> "OptimizeInput":
+        parse_ph_days(self.public_holidays, self.start_date)
+        return self
+
+    @property
+    def public_holiday_days(self) -> set[int]:
+        return parse_ph_days(self.public_holidays, self.start_date)
+
+
 class ErrorBody(BaseModel):
     code: str
     message: str
@@ -105,6 +126,24 @@ async def audit_form(
         raise RequestValidationError(exc.errors()) from exc
 
 
+async def optimize_form(
+    start_date: Annotated[date, Form()],
+    public_holidays: Annotated[list[str] | None, Form()] = None,
+    worksheet_name: Annotated[str | None, Form()] = None,
+    max_time_seconds: Annotated[float, Form(gt=0, le=120)] = 60.0,
+) -> OptimizeInput:
+    """Parse optimizer multipart fields."""
+    try:
+        return OptimizeInput(
+            start_date=start_date,
+            public_holidays=public_holidays or [],
+            worksheet_name=worksheet_name,
+            max_time_seconds=max_time_seconds,
+        )
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors()) from exc
+
+
 app = FastAPI(
     title="Roster Audit API",
     version="1.0.0",
@@ -119,6 +158,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
+    expose_headers=["Content-Disposition", "X-Roster-Penalized-Changes", "X-Roster-Cell-Edits", "X-Roster-Plus-Changes", "X-Roster-Status"],
 )
 
 
@@ -127,7 +167,8 @@ def custom_openapi() -> dict[str, object]:
     if app.openapi_schema:
         return app.openapi_schema
     schema = get_openapi(title=app.title, version=app.version, description=app.description, routes=app.routes)
-    schema["paths"]["/rpt-roster"]["post"]["responses"].pop("422", None)
+    for path in ("/rpt-roster", "/optimize-roster"):
+        schema["paths"][path]["post"]["responses"].pop("422", None)
     app.openapi_schema = schema
     return app.openapi_schema
 
@@ -227,4 +268,83 @@ async def audit(
         failure_count=len(response_failures),
         worksheet=worksheet,
         failures=response_failures,
+    )
+
+
+@app.post(
+    "/optimize-roster",
+    response_class=StreamingResponse,
+    responses={
+        200: {"content": {XLSX_MEDIA_TYPE: {}}},
+        400: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        413: {"model": ErrorResponse},
+        415: {"model": ErrorResponse},
+    },
+    tags=["optimization"],
+)
+async def optimize(
+    parameters: Annotated[OptimizeInput, Depends(optimize_form)],
+    file: Annotated[UploadFile, File(description="Complete 28-day roster workbook in .xlsx format")],
+) -> StreamingResponse:
+    """Return an audited, optimized XLSX copy of a complete roster."""
+    if (not (file.filename or "").lower().endswith(".xlsx")
+            or file.content_type != XLSX_MEDIA_TYPE):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "error": {
+                    "code": "unsupported_file",
+                    "message": f"file must be an .xlsx upload with Content-Type {XLSX_MEDIA_TYPE}.",
+                }
+            },
+        )
+
+    contents = await file.read(MAX_UPLOAD_BYTES + 1)
+    await file.close()
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={
+                "error": {
+                    "code": "file_too_large",
+                    "message": f"file must be no larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+                }
+            },
+        )
+    if not contents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": {"code": "empty_file", "message": "file must not be empty."}},
+        )
+
+    try:
+        result = optimize_full_roster(
+            contents,
+            start_date=parameters.start_date,
+            public_holiday_days=parameters.public_holiday_days,
+            worksheet_name=parameters.worksheet_name,
+            max_time_seconds=parameters.max_time_seconds,
+        )
+    except NoFeasibleRosterError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": {"code": "infeasible_roster", "message": str(exc)}},
+        ) from exc
+    except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": {"code": "invalid_workbook", "message": str(exc)}},
+        ) from exc
+
+    return StreamingResponse(
+        BytesIO(result.workbook_bytes),
+        media_type=XLSX_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": 'attachment; filename="optimized_roster.xlsx"',
+            "X-Roster-Penalized-Changes": str(result.penalized_change_count),
+            "X-Roster-Plus-Changes": str(result.plus_change_count),
+            "X-Roster-Cell-Edits": str(result.cell_edit_count),
+            "X-Roster-Status": result.status,
+        },
     )

@@ -6,6 +6,7 @@ from datetime import date
 from roster_audit.individual_staff_constraints import (
     Roster,
     StaffSchedule,
+    audit_consecutive_night_shifts,
     audit_four_week_hours,
     audit_individual_rules,
     audit_no_after_night_shift,
@@ -16,6 +17,20 @@ from roster_audit.individual_staff_constraints import (
 
 
 class IndividualConstraintTests(unittest.TestCase):
+    def test_three_consecutive_nights_are_rejected_across_a_week_boundary(self) -> None:
+        shifts = ("Z1",) * 5 + ("P", "W", "D", "NO") + ("Z1",) * 19
+
+        failures = audit_consecutive_night_shifts(StaffSchedule(6, shifts))
+
+        self.assertEqual([(failure.category, failure.day) for failure in failures], [
+            ("Consecutive night shifts", 8),
+        ])
+
+    def test_two_consecutive_nights_are_allowed(self) -> None:
+        shifts = ("P", "W", "NO") + ("Z1",) * 25
+
+        self.assertEqual(audit_consecutive_night_shifts(StaffSchedule(6, shifts)), [])
+
     def test_rest_day_spacing_uses_rd_and_vlrd_for_work_stretches(self) -> None:
         shifts = ("RD",) + ("XE1",) * 11 + ("VLRD",) + ("XE1",) * 11 + ("RD",) * 4
         failures = audit_rest_day_spacing(StaffSchedule(6, shifts))

@@ -2,69 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal
 from datetime import date, timedelta
 
-from .individual_staff_constraints import AuditFailure, DPW_CODES, Roster
-
-
-
-WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-SINGLE_PLUS_CODES = frozenset({"OFF+", "RD+", "NO+"})
-DOUBLE_PLUS_CODES = frozenset({"OFF++", "RD++", "NO++"})
-Z1_D_CODES = frozenset({"Z1", "D"})
-XE_XE1_CODES = frozenset({"XE", "XE1"})
-Z1_Y_Z_CODES = frozenset({"Z1", "Y", "Z"})
-Z1_Y_CODES = frozenset({"Z1", "Y"})
-VL_OC_CODES = frozenset({"VL", "VLOFF", "VLRD", "OC"})
-
-ALL_DAYS = frozenset(WEEKDAY_NAMES)
-MON_TUE = frozenset({"Monday", "Tuesday"})
-MON_THU_FRI = frozenset({"Monday", "Thursday", "Friday"})
-TUE_WED = frozenset({"Tuesday", "Wednesday"})
-WED_SUN = frozenset({"Wednesday", "Thursday", "Friday", "Saturday", "Sunday"})
-FRI_SAT = frozenset({"Friday", "Saturday"})
-PH_Z_MIN_FOUR_DAYS = ALL_DAYS - FRI_SAT
-
-
-@dataclass(frozen=True)
-class CoverageRule:
-    """One coverage target that applies to a set of weekdays."""
-
-    label: str
-    accepted_codes: frozenset[str]
-    target: int
-    comparison: Literal["at least", "exactly", "at most"]
-    weekdays: frozenset[str]
-
-
-NORMAL_COVERAGE_RULES = (
-    CoverageRule("VL/VLOFF/VLRD/OC", VL_OC_CODES, 2, "at most", ALL_DAYS),
-    CoverageRule("single-plus (OFF+/RD+/NO+)", SINGLE_PLUS_CODES, 1, "exactly", ALL_DAYS),
-    CoverageRule("double-plus (OFF++/RD++/NO++)", DOUBLE_PLUS_CODES, 1, "exactly", ALL_DAYS),
-    CoverageRule("Z1/D", Z1_D_CODES, 6, "at least", MON_THU_FRI),
-    CoverageRule("Z1/D", Z1_D_CODES, 5, "at least", TUE_WED),
-    CoverageRule("D/P/W", DPW_CODES, 4, "exactly", MON_TUE),
-    CoverageRule("D/P/W", DPW_CODES, 3, "exactly", WED_SUN),
-    CoverageRule("Z1/Y/Z", Z1_Y_Z_CODES, 5, "at least", frozenset({"Saturday"})),
-    CoverageRule("Z1/Y", Z1_Y_CODES, 4, "at least", frozenset({"Sunday"})),
-    CoverageRule("Z", frozenset({"Z"}), 1, "exactly", frozenset({"Saturday"})),
-    CoverageRule("Y", frozenset({"Y"}), 1, "exactly", frozenset({"Saturday"})),
-    CoverageRule("Y", frozenset({"Y"}), 2, "exactly", frozenset({"Sunday"})),
-    CoverageRule("XE/XE1", XE_XE1_CODES, 2, "exactly", frozenset({"Sunday"})),
+from .daily_policy import (
+    ALL_DAYS, DOUBLE_PLUS_CODES, DPW_CODES, FRI_SAT, MON_THU_FRI, MON_TUE,
+    NORMAL_COVERAGE_RULES, PH_COVERAGE_RULES, PH_Z_MIN_FOUR_DAYS,
+    SINGLE_PLUS_CODES, TUE_WED, VL_OC_CODES, WED_SUN, WEEKDAY_NAMES,
+    XE_XE1_CODES, Z1_D_CODES, Z1_Y_CODES, Z1_Y_Z_CODES, CoverageRule,
+    coverage_rules_for_day,
 )
+from .individual_staff_constraints import AuditFailure, Roster
 
-PH_COVERAGE_RULES = (
-    CoverageRule("VL/VLOFF/VLRD/OC", VL_OC_CODES, 2, "at most", ALL_DAYS),
-    CoverageRule("single-plus (OFF+/RD+/NO+)", SINGLE_PLUS_CODES, 1, "exactly", ALL_DAYS),
-    CoverageRule("double-plus (OFF++/RD++/NO++)", DOUBLE_PLUS_CODES, 1, "exactly", ALL_DAYS),
-    CoverageRule("Z1/Y/Z", Z1_Y_Z_CODES, 4, "at least", PH_Z_MIN_FOUR_DAYS),
-    CoverageRule("Z1/Y/Z", Z1_Y_Z_CODES, 5, "at least", FRI_SAT),
-    CoverageRule("XE/XE1", XE_XE1_CODES, 2, "exactly", ALL_DAYS),
-    CoverageRule("D/P/W", DPW_CODES, 4, "exactly", MON_TUE),
-    CoverageRule("D/P/W", DPW_CODES, 3, "exactly", WED_SUN),
-)
 
 
 def audit_coverage_rule(rule: CoverageRule, shifts: tuple[str, ...], day: int, weekday: str, roster_date: date | None,) -> AuditFailure | None:
@@ -103,9 +51,9 @@ def audit_daily_rules(roster: Roster, ph_days: set[int], start_date: date | None
         roster_date = start_date + timedelta(days=day_index) if start_date else None
         weekday = WEEKDAY_NAMES[day_index % 7]
         day_shifts = tuple(schedule.shifts[day_index] for schedule in roster.staff)
-        rules = PH_COVERAGE_RULES if day in ph_days else NORMAL_COVERAGE_RULES
+        rules = coverage_rules_for_day(day, ph_days)
         failures.extend(
-            failure for rule in rules if weekday in rule.weekdays
+            failure for rule in rules
             if (failure := audit_coverage_rule(rule, day_shifts, day, weekday, roster_date)) is not None
         )
     return failures

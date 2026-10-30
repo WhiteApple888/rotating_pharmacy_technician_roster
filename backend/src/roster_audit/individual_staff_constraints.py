@@ -5,21 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from .individual_policy import (
+    DPW_CODES, MAX_CONSECUTIVE_NIGHT_SHIFTS, NO_CODES,
+    REQUIRED_FOUR_WEEK_HOURS, SHIFT_HOURS,
+)
+from .rest_day_policy import (
+    DAYS_PER_WEEK, MAX_REST_DAY_GAP, REST_DAY_CODES, REST_DAY_NO_PLUS_CODES,
+    REST_DAYS_PER_WEEK, WEEKS_PER_ROSTER,
+)
+
 TOTAL_NUMBER_OF_STAFF = 16
-MAX_REST_DAY_GAP = 12
-
-
-SHIFT_HOURS: dict[str, int] = {
-    "XE1": 8, "XO": 8, "Z1": 8, "Z": 8, "Y": 8, "PH": 8, "VL": 8, "OC": 8,
-    "D": 12, "P": 12, "W": 10, "XE": 4, "VL(TO4H)": 4,
-    "RD": 0, "RD+": 0, "RD++": 0, "VLRD": 0, "VLOFF": 0, "VLPH": 0,
-    "OFF": 0, "OFF+": 0, "OFF++": 0, "NO": 0, "NO+": 0, "NO++": 0,
-}
-
-REST_DAY_CODES = frozenset({"RD", "RD+", "RD++", "VLRD"})
-REST_DAY_NO_PLUS_CODES = frozenset({"RD", "VLRD"})
-DPW_CODES = frozenset({"D", "P", "W"})
-NO_CODES = frozenset({"NO", "NO+", "NO++"})
 
 
 @dataclass(frozen=True)
@@ -53,22 +48,22 @@ class AuditFailure:
 def audit_four_week_hours(schedule: StaffSchedule) -> list[AuditFailure]:
     """Require exactly 160 working hours for one staff member."""
     total_hours = sum(SHIFT_HOURS.get(shift, 0) for shift in schedule.shifts)
-    if total_hours == 160:
+    if total_hours == REQUIRED_FOUR_WEEK_HOURS:
         return []
     return [AuditFailure(
         category="Four-week working hours",
         staff_row=schedule.excel_row,
         message=(f"Fail: Staff in Row {schedule.excel_row} worked {total_hours} hours "
-                 "across the 4-week period; required 160."),
+                 f"across the 4-week period; required {REQUIRED_FOUR_WEEK_HOURS}."),
     )]
 
 
 def audit_weekly_rest_days(schedule: StaffSchedule) -> list[AuditFailure]:
     """Require exactly one recognised rest-day code in each week."""
     failures: list[AuditFailure] = []
-    for week in range(4):
-        week_shifts = schedule.shifts[week * 7:(week + 1) * 7]
-        if sum(shift in REST_DAY_CODES for shift in week_shifts) != 1:
+    for week in range(WEEKS_PER_ROSTER):
+        week_shifts = schedule.shifts[week * DAYS_PER_WEEK:(week + 1) * DAYS_PER_WEEK]
+        if sum(shift in REST_DAY_CODES for shift in week_shifts) != REST_DAYS_PER_WEEK:
             failures.append(AuditFailure(
                 category="Weekly rest days",
                 staff_row=schedule.excel_row,
@@ -85,7 +80,7 @@ def audit_rest_day_spacing(
     *,
     include_schedule_gaps: bool = True,
 ) -> list[AuditFailure]:
-    """Flag twelve or more worked days between consecutive recognised RDs.
+    """Flag more than twelve days between qualifying rest days.
 
     ``previous_rest_day`` is the staff member's last RD before this roster.
     It is included only when ``start_date`` is supplied, so the Day 1 boundary
@@ -191,6 +186,24 @@ def audit_night_shift_sequence(schedule: StaffSchedule) -> list[AuditFailure]:
     return failures
 
 
+def audit_consecutive_night_shifts(schedule: StaffSchedule) -> list[AuditFailure]:
+    """Allow no more than two consecutive P, W, or D shifts."""
+    failures: list[AuditFailure] = []
+    run = 0
+    for day, shift in enumerate(schedule.shifts, start=1):
+        run = run + 1 if shift in DPW_CODES else 0
+        if run == MAX_CONSECUTIVE_NIGHT_SHIFTS + 1:
+            failures.append(AuditFailure(
+                category="Consecutive night shifts",
+                staff_row=schedule.excel_row,
+                day=day,
+                message=(f"Fail: Staff in Row {schedule.excel_row} has P/W/D on "
+                         f"Days {day - MAX_CONSECUTIVE_NIGHT_SHIFTS}-{day}; "
+                         f"maximum is {MAX_CONSECUTIVE_NIGHT_SHIFTS} consecutive night shifts."),
+            ))
+    return failures
+
+
 def audit_individual_rules(roster: Roster, start_date: date | None = None) -> list[AuditFailure]:
     """Apply every staff-level constraint to every schedule in a roster."""
     audit_functions = (
@@ -199,5 +212,6 @@ def audit_individual_rules(roster: Roster, start_date: date | None = None) -> li
         lambda schedule: audit_rest_day_spacing(schedule, start_date=start_date),
         audit_no_after_night_shift,
         audit_night_shift_sequence,
+        audit_consecutive_night_shifts,
     )
     return [failure for schedule in roster.staff for audit in audit_functions for failure in audit(schedule)]

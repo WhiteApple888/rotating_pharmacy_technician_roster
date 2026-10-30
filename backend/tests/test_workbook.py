@@ -6,11 +6,30 @@ from datetime import date
 from pathlib import Path
 
 from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 
+from roster_audit.parsing import day_columns
 from roster_audit.workbook import load_last_roster_rest_days, load_roster
 
 
 class WorkbookTests(unittest.TestCase):
+    def test_sample_roster_coordinates_match_the_four_week_layout(self) -> None:
+        source = Path(__file__).resolve().parents[2] / "sample" / "13Apr-10May_26.xlsx"
+        roster = load_roster(source, "13Aprto10May")
+        self.assertEqual(
+            [get_column_letter(day_columns()[day - 1]) for day in (1, 7, 8, 14, 15, 21, 22, 28)],
+            ["D", "J", "O", "U", "Z", "AF", "AK", "AQ"],
+        )
+        self.assertEqual((roster.staff[0].excel_row, roster.staff[-1].excel_row), (6, 21))
+        self.assertEqual(
+            [roster.staff[0].shifts[day - 1] for day in (1, 8, 15, 22)],
+            ["Z1", "NO++", "W", "NO"],
+        )
+        self.assertEqual(roster.staff[-1].shifts[27], "OFF")
+        history = load_last_roster_rest_days(source, date(2026, 4, 13))
+        self.assertEqual(len(history.dates), 16)
+        self.assertEqual(history.dates[-1], date(2026, 4, 12))
+
     def test_load_roster_normalises_the_fixed_grid(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "roster.xlsx"
