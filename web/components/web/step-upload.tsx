@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { gridPriorityValue } from "@/lib/grid-priority"
 
 type SpreadsheetRow = Record<string, string>
 type Source = "upload" | "grid"
@@ -33,6 +34,7 @@ type Source = "upload" | "grid"
 // The supplied roster uses columns A:BT (72 columns). Leave room for
 // more columns so a complete worksheet can be pasted without truncation.
 const GRID_COLUMN_COUNT = 100
+const MAX_FILE_SIZE = 10 * 1024 * 1024
 const spreadsheetKeys = Array.from(
   { length: GRID_COLUMN_COUNT },
   (_, index) => `column${index + 1}`
@@ -68,8 +70,9 @@ const excelDateSerial = (value: unknown) => {
     }
   }
 
-  const match = text
-    .match(/^(?:(\d{1,2})\/(\d{1,2})\/(\d{4})|(\d{4})-(\d{1,2})-(\d{1,2}))$/)
+  const match = text.match(
+    /^(?:(\d{1,2})\/(\d{1,2})\/(\d{4})|(\d{4})-(\d{1,2})-(\d{1,2}))$/
+  )
   if (!match) return value ?? ""
 
   const [
@@ -138,9 +141,16 @@ export function StepUpload({
 
   const selectFile = async (file?: File) => {
     if (!file || isParsing) return
+    setActiveFile(null)
+    setSource(null)
+    setWorksheetNames([])
     const extension = file.name.split(".").pop()?.toLowerCase()
     if (extension !== "xlsx") {
       setError("Select an .xlsx spreadsheet.")
+      return
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      setError("Select an Excel file no larger than 10 MB.")
       return
     }
     setIsParsing(true)
@@ -168,7 +178,7 @@ export function StepUpload({
       setError(
         reason instanceof Error
           ? reason.message
-          : "The spreadsheet could not be read."
+          : "The spreadsheet could not be read. Check that it is a valid .xlsx file and try again."
       )
     } finally {
       setIsParsing(false)
@@ -190,9 +200,12 @@ export function StepUpload({
         rows.map((row, rowIndex) =>
           spreadsheetKeys.map((key, columnIndex) => {
             const value = row[key] ?? ""
-            return normaliseRestDayDates && rowIndex > 0 && columnIndex === 1
-              ? excelDateSerial(value)
-              : value
+            if (normaliseRestDayDates && rowIndex > 0 && columnIndex === 1) {
+              return excelDateSerial(value)
+            }
+            return normaliseRestDayDates
+              ? value
+              : gridPriorityValue(value, rowIndex, columnIndex)
           })
         )
       )
@@ -281,7 +294,7 @@ export function StepUpload({
     <Card className="border-0 shadow-xl ring-1 shadow-slate-200/60 ring-slate-200/70 dark:shadow-none">
       <CardHeader className="px-7 pt-8 sm:px-10">
         <CardTitle className="text-2xl tracking-tight">
-          Start a roster audit
+          Add your roster
         </CardTitle>
         <CardDescription>
           Upload a spreadsheet or paste roster data into a structured workbook.
@@ -302,12 +315,6 @@ export function StepUpload({
           </TabsList>
           <TabsContent value="upload">
             <div
-              role="button"
-              tabIndex={0}
-              onClick={() => inputRef.current?.click()}
-              onKeyDown={(event) =>
-                event.key === "Enter" && inputRef.current?.click()
-              }
               onDragEnter={(event) => {
                 event.preventDefault()
                 setIsDragging(true)
@@ -316,13 +323,13 @@ export function StepUpload({
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
               className={cn(
-                "group flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 text-center transition-all",
+                "flex min-h-64 flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-6 text-center transition-colors motion-reduce:transition-none",
                 isDragging
                   ? "border-primary bg-primary/5"
                   : "border-border bg-muted/30 hover:border-primary/50 hover:bg-primary/[0.03]"
               )}
             >
-              <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-background text-primary shadow-sm ring-1 ring-border transition-transform group-hover:-translate-y-1">
+              <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-background text-primary shadow-sm ring-1 ring-border">
                 {isParsing ? (
                   <LoaderCircle className="size-8 animate-spin" />
                 ) : (
@@ -337,14 +344,28 @@ export function StepUpload({
                     : "Upload roster spreadsheet"}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Drag & drop an .xlsx file or click to browse
+                Drag & drop an .xlsx file or browse your files
               </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-4"
+                disabled={isParsing}
+                onClick={() => inputRef.current?.click()}
+              >
+                Browse files
+              </Button>
               <input
                 ref={inputRef}
                 type="file"
                 accept=".xlsx"
                 className="sr-only"
-                onChange={(event) => selectFile(event.target.files?.[0])}
+                tabIndex={-1}
+                aria-hidden="true"
+                onChange={(event) => {
+                  selectFile(event.target.files?.[0])
+                  event.target.value = ""
+                }}
               />
               <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
                 {isParsing ? (
@@ -408,7 +429,7 @@ export function StepUpload({
           </p>
         ) : null}
         <div className="mt-6 flex justify-end border-t pt-5">
-          <Button size="lg" disabled={!canProceed} onClick={proceed}>
+          <Button size="lg" disabled={!canProceed || isParsing} onClick={proceed}>
             Next <ArrowRight />
           </Button>
         </div>

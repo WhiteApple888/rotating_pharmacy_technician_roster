@@ -1,6 +1,6 @@
 # Pharmacy Technician Roster Auditor
 
-A web application and Python CLI for auditing four-week pharmacy technician rosters in Excel. Upload a workbook through the Next.js interface or run the auditor locally; both use the same FastAPI-backed validation rules.
+A web application and Python CLI for auditing four-week pharmacy technician rosters in Excel. The web dashboard also offers solver-assisted roster optimization. The web interface calls a FastAPI service; the CLI runs the same audit rules locally.
 
 The auditor reads the source workbook without modifying it. The CLI additionally produces an Excel report with `Summary` and `Failures` sheets.
 
@@ -11,7 +11,7 @@ The auditor reads the source workbook without modifying it. The CLI additionally
 - Night-shift and next-day-off sequencing, including a maximum of two consecutive P/W/D shifts
 - Daily staffing coverage, with separate public-holiday rules
 
-The default roster has 16 staff across 28 days. The API supports 1–30 staff; the roster grid starts at worksheet row 6.
+The default roster has 16 staff across 28 days. The API and web audit support 1–30 staff; the CLI audits 16 staff. The roster grid starts at worksheet row 6.
 
 ## Requirements
 
@@ -37,7 +37,15 @@ pnpm install
 pnpm dev
 ```
 
-The client is available at `http://localhost:3000`, and the API documentation is at `http://localhost:8000/docs`. Set `AUDIT_API_URL` (server-side) or `NEXT_PUBLIC_AUDIT_API_URL` in `web/.env.local` if the API runs elsewhere.
+The client is available at `http://localhost:3000`, and the API documentation is at `http://localhost:8000/docs`. The web server uses `AUDIT_API_URL` if set, then `NEXT_PUBLIC_AUDIT_API_URL`, and otherwise defaults to `http://localhost:8000`. Set either in `web/.env.local` if the API runs elsewhere; the URL must be reachable from the Next.js server.
+
+## Use the dashboard
+
+1. Upload an `.xlsx` workbook (up to 10 MB), or paste the active roster and previous rest-day worksheets into the data grid. The grid accepts up to 100 columns and creates a new workbook with `Active Roster` and `lastRosterRD` sheets. Preserve the expected row and column positions described below.
+2. Confirm the input, then select the roster worksheet, start date, and any public holidays. These settings are shared by both workflows.
+3. Choose **Audit**, set the staff count, and run it to see the results; or choose **Optimization** to download a revised workbook. You can run either workflow first. Optimization requires a complete 16-staff roster and a Monday start date.
+
+For grid entry, paste the previous rest-day dates in column B of the `Last Roster RD` grid. Dates can be entered as `DD/MM/YYYY`, `YYYY-MM-DD`, or Excel date serials. Grid entry creates a workbook from the entered values; upload the original workbook when its existing layout needs to be preserved.
 
 ## CLI
 

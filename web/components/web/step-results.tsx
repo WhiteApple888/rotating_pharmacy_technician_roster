@@ -1,7 +1,8 @@
-"use client"
+﻿"use client"
 
 import { useState } from "react"
-import { AlertCircle, RefreshCw } from "lucide-react"
+import { format, isValid, parse, parseISO } from "date-fns"
+import { AlertCircle, CheckCircle2, RefreshCw } from "lucide-react"
 import {
   Accordion,
   AccordionContent,
@@ -13,16 +14,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { AuditResponse } from "@/lib/schema/audit-api"
-import { format, parseISO } from "date-fns"
+import type { AuditFailure, AuditResponse } from "@/lib/schema/audit-api"
 
 type IssueFilter = "all" | "daily" | "individual"
-
-const issueFilters: { value: IssueFilter; label: string }[] = [
-  { value: "all", label: "All Issues" },
-  { value: "daily", label: "Daily" },
-  { value: "individual", label: "Individual Rows" },
-]
+type Finding = { failure: AuditFailure; id: string }
 
 export function StepResults({
   result,
@@ -31,152 +26,191 @@ export function StepResults({
   result: AuditResponse
   onReaudit: () => void
 }) {
-  // activeFilter tracks which tab or filter view is currently selected by the user.
-  const [activeFilter, setActiveFilter] = useState<IssueFilter>("all")
-  const [openFailureValues, setOpenFailureValues] = useState<string[]>([])
-  const filteredFailures = result.failures.filter((failure) => {
-    if (activeFilter === "all") return true
-    return activeFilter === "daily"
-      ? failure.day !== null
-      : failure.day === null
-  })
-  const issueCountLabel = `${filteredFailures.length} issue${filteredFailures.length === 1 ? "" : "s"}`
-  const failureValues = filteredFailures.map((_, index) => `failure-${index}`)
+  const [filter, setFilter] = useState<IssueFilter>("all")
+  const [openGroups, setOpenGroups] = useState<string[]>([])
+  const findings = result.failures.map((failure, index) => ({
+    failure,
+    id: `finding-${index}`,
+  }))
+  // A staff row identifies individual findings even when they also refer to a day.
+  const daily = findings.filter(
+    ({ failure }) => failure.staff_row == null && failure.day != null
+  )
+  const individual = findings.filter(({ failure }) => failure.staff_row != null)
+  const other = findings.filter(
+    ({ failure }) => failure.staff_row == null && failure.day == null
+  )
+  const groups = Array.from({ length: 4 }, (_, index) => ({
+    id: `week-${index + 1}`,
+    label: `Week ${index + 1}`,
+    findings: daily.filter(
+      ({ failure }) =>
+        failure.day != null &&
+        failure.day >= index * 7 + 1 &&
+        failure.day <= index * 7 + 7
+    ),
+  })).filter((group) => group.findings.length > 0)
+  const undatedDaily = daily.filter(
+    ({ failure }) =>
+      failure.day != null && (failure.day < 1 || failure.day > 28)
+  )
+  if (undatedDaily.length)
+    groups.push({
+      id: "other-days",
+      label: "Other days",
+      findings: undatedDaily,
+    })
+  const visible =
+    filter === "daily" ? daily : filter === "individual" ? individual : findings
+  const visibleGroups = [
+    ...(filter === "individual" ? [] : groups),
+    ...(filter === "daily"
+      ? []
+      : Array.from(new Set(individual.map(({ failure }) => failure.staff_row)))
+          .sort((a, b) => (a ?? 0) - (b ?? 0))
+          .map((row) => ({
+            id: `staff-${row}`,
+            label: `Staff row ${row}`,
+            findings: individual.filter(
+              ({ failure }) => failure.staff_row === row
+            ),
+          }))),
+    ...(filter === "all" && other.length
+      ? [{ id: "roster", label: "Roster-wide", findings: other }]
+      : []),
+  ]
+  const groupIds = visibleGroups.map(({ id }) => id)
+  const allOpen = groupIds.every((id) => openGroups.includes(id))
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Results</h1>
+    <div className="mt-8 space-y-5 border-t pt-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h4 className="text-xl font-semibold">Results</h4>
         <Button variant="outline" onClick={onReaudit}>
-          <RefreshCw /> Re-audit File
+          <RefreshCw /> Re-audit file
         </Button>
       </div>
       <Alert
         variant={result.passed ? "success" : "destructive"}
-        className="border-0 px-5 py-4 ring-1"
+        className={
+          result.passed
+            ? "border-emerald-500/50 px-5 py-4"
+            : "border-destructive/50 px-5 py-4"
+        }
       >
-        <AlertCircle className="size-8" />
-        <AlertTitle className="text-xl">
+        {result.passed ? (
+          <CheckCircle2 className="size-6" />
+        ) : (
+          <AlertCircle className="size-6" />
+        )}
+        <AlertTitle className="text-lg">
           {result.passed
             ? "Audit passed"
             : `Audit failed · ${result.failure_count} issue${result.failure_count === 1 ? "" : "s"} detected`}
         </AlertTitle>
-        <AlertDescription className="text-base mt-1">
+        <AlertDescription className="mt-1">
           {result.passed
             ? "No issues were detected."
             : "Please review the detected issues before publishing this roster."}
         </AlertDescription>
       </Alert>
-      <Card className="border-0 shadow-xl ring-1 shadow-slate-200/60 ring-slate-200/70 dark:shadow-none">
+      <Card className="gap-0 py-0">
         <Tabs
-          value={activeFilter}
-          onValueChange={(value) => setActiveFilter(value as IssueFilter)}
+          value={filter}
+          onValueChange={(value) => {
+            setFilter(value as IssueFilter)
+            setOpenGroups([])
+          }}
           className="gap-0"
         >
-          <CardHeader className="gap-3 border-b px-6 py-5 text-sm font-medium sm:px-7">
-            <Badge 
-            variant= {result.passed ? "success" : "destructive"}
-            className="rounded-full px-3 py-4 text-sm font-semibold">
-              {issueCountLabel}
+          <CardHeader className="gap-3 border-b p-5">
+            <Badge
+              variant={result.passed ? "success" : "destructive"}
+              className="rounded-full px-3 py-1"
+            >
+              {visible.length} issue{visible.length === 1 ? "" : "s"}
             </Badge>
-            <TabsList className="min-h-10  w-full justify-start gap-1 rounded-lg border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-950">
-              {issueFilters.map((filter) => (
-                <TabsTrigger
-                  key={filter.value}
-                  value={filter.value}
-                  className="shrink-0 px-3 py-4 text-m font-extrabold transition-all duration-200 data-active:bg-background data-active:text-foreground dark:data-active:border-zinc-700 dark:data-active:bg-zinc-800"
-                >
-                  {filter.label}
-                </TabsTrigger>
-              ))}
+            <TabsList className="h-auto min-h-10 w-full border p-1">
+              <TabsTrigger value="all" className="py-2">
+                All Issues
+              </TabsTrigger>
+              <TabsTrigger value="daily" className="py-2">
+                Daily
+              </TabsTrigger>
+              <TabsTrigger value="individual" className="py-2">
+                Individual Rows
+              </TabsTrigger>
             </TabsList>
           </CardHeader>
-          <TabsContent value={activeFilter} className="mt-0 px-6 py-2 sm:px-7">
-            {filteredFailures.length === 0 ? (
-              <div className="flex min-h-36 items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50/50 px-4 text-center text-sm text-muted-foreground dark:border-zinc-800 dark:bg-zinc-950/50">
+          <TabsContent value={filter} className="p-5">
+            {visible.length === 0 ? (
+              <div className="flex min-h-36 items-center justify-center rounded-lg border border-dashed bg-muted/30 px-4 text-center text-sm text-muted-foreground">
                 No issues found in this category
               </div>
             ) : (
               <>
-                <div className="flex justify-end gap-2 border-b py-3">
+                <div className="flex justify-end gap-2 border-b pb-3">
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setOpenFailureValues(failureValues)}
-                    disabled={openFailureValues.length === failureValues.length}
+                    disabled={allOpen}
+                    onClick={() => {
+                      setOpenGroups(groupIds)
+                    }}
                   >
                     Expand all
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setOpenFailureValues([])}
-                    disabled={openFailureValues.length === 0}
+                    disabled={!groupIds.some((id) => openGroups.includes(id))}
+                    onClick={() => {
+                      setOpenGroups([])
+                    }}
                   >
                     Collapse all
                   </Button>
                 </div>
                 <Accordion
                   multiple
-                  value={openFailureValues}
-                  onValueChange={setOpenFailureValues}
-                  className="motion-safe:animate-in motion-safe:duration-200 motion-safe:fade-in-0"
+                  value={openGroups}
+                  onValueChange={setOpenGroups}
                 >
-                {filteredFailures.map((failure, index) => (
-                  <AccordionItem
-                    key={`${failure.category}-${index}`}
-                    value={`failure-${index}`}
-                  >
-                    <AccordionTrigger className="py-4 no-underline hover:no-underline">
-                      <div className="flex min-w-0 flex-1 flex-col items-start gap-4 pr-4 sm:flex-row sm:items-center">
-                        
-                        <Badge variant="secondary" className="font-normal">
-                            {failure.day
-                              ? `Day ${failure.day}`
-                              : failure.staff_row
-                                ? `Staff Row ${failure.staff_row}`
-                                : "Roster"}
-                        </Badge>
-                        
-                        <span className="truncate text-sm font-medium">
-                          {failure.day !== null
-                            ? failure.roster_date
-                              ? <Badge variant="secondary" className="font-normal">
-                                {format(parseISO(failure.roster_date), "dd-MM-yyyy")}
+                  {visibleGroups.map((group) => (
+                    <AccordionItem key={group.id} value={group.id}>
+                      <AccordionTrigger className="py-4 hover:no-underline">
+                        <span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 pr-3">
+                          <span className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="mr-1 text-sm font-semibold">
+                              {group.label}
+                            </span>
+                            {Array.from(
+                              new Set(
+                                group.findings.map(
+                                  ({ failure }) => failure.category
+                                )
+                              )
+                            ).map((category) => (
+                              <Badge
+                                key={category}
+                                variant="destructive"
+                                className="h-auto max-w-full text-left whitespace-normal"
+                              >
+                                {category}
                               </Badge>
-                              : ""
-                            : ""}
+                            ))}
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {group.findings.length} issue
+                            {group.findings.length === 1 ? "" : "s"}
+                          </span>
                         </span>
-                        <Badge variant="destructive">{failure.category}</Badge>
-
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-5">
-                      <div className="grid gap-4 rounded-xl bg-muted/60 p-4 text-sm sm:grid-cols-2">
-                        <div>
-                          <p className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                            Details
-                          </p>
-                          <p>
-                            {[
-                              failure.staff_row &&
-                              `Staff row ${failure.staff_row}`,
-                              failure.day && `Roster day ${failure.day}`,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ") || "No additional location details."}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                            Violation
-                          </p>
-                          <p>{failure.message}</p>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <FindingList findings={group.findings} />
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
                 </Accordion>
               </>
             )}
@@ -184,5 +218,60 @@ export function StepResults({
         </Tabs>
       </Card>
     </div>
+  )
+}
+
+function FindingList({ findings }: { findings: Finding[] }) {
+  return (
+    <div className="rounded-lg border bg-muted/60 px-4">
+      {findings.map(({ failure, id }) => {
+        const message = displayMessage(failure)
+        const date = failure.roster_date ? parseISO(failure.roster_date) : null
+        const dateLabel =
+          date && isValid(date)
+            ? format(date, "d MMM yyyy")
+            : failure.roster_date
+        const summary = (
+          <span className="flex min-w-0 flex-1 flex-col items-start gap-2 text-left">
+            <span className="text-sm leading-6 font-medium text-muted-foreground">{message}</span>
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-normal text-muted-foreground">
+              {failure.day != null &&
+                !new RegExp(`\\bDay ${failure.day}\\b`, "i").test(message) && (
+                  <span>Day {failure.day}</span>
+                )}
+              {dateLabel && !message.includes(dateLabel) && (
+                <span>{dateLabel}</span>
+              )}
+              {failure.source_cell?.trim() && (
+                <span>Source cell: {failure.source_cell}</span>
+              )}
+            </span>
+          </span>
+        )
+        return (
+          <div key={id} className="border-b py-3 last:border-0">
+            {summary}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function displayMessage(failure: AuditFailure) {
+  let message = failure.message.replace(/^Fail:\s*/i, "")
+  if (failure.staff_row != null) {
+    const prefix = new RegExp(`^Staff in Row ${failure.staff_row}\\s+`, "i")
+    if (prefix.test(message)) {
+      message = message.replace(prefix, "")
+      message = message.charAt(0).toUpperCase() + message.slice(1)
+    }
+  }
+  return message.replace(
+    /\b\d{1,2} (?:January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b/g,
+    (value) => {
+      const date = parse(value, "d MMMM yyyy", new Date())
+      return isValid(date) ? format(date, "d MMM yyyy") : value
+    }
   )
 }
