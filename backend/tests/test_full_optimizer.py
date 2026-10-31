@@ -47,7 +47,7 @@ class FullOptimizerTests(unittest.TestCase):
     def optimize(self, contents):
         return optimize_full_roster(
             contents, start_date=START, public_holiday_days={19},
-            worksheet_name=SHEET, max_time_seconds=30,
+            worksheet_name=SHEET, max_time_seconds=30, fixed_staff={16},
         )
 
     def assert_audited_export(self, result):
@@ -55,6 +55,32 @@ class FullOptimizerTests(unittest.TestCase):
         prior = load_last_roster_rest_days(BytesIO(result.workbook_bytes), START)
         self.assertEqual(exported, result.roster)
         self.assertEqual(audit_loaded_roster(exported, {19}, START, prior.dates), [])
+
+    def test_fixed_staff_and_restrictions_conflict_is_infeasible(self):
+        original = load_roster(BytesIO(SOURCE.read_bytes()), SHEET)
+        code = original.staff[0].shifts[0]
+        with self.assertRaisesRegex(NoFeasibleRosterError, rf"Staff 1, day 1 is fixed to restricted shift {code}"):
+            optimize_full_roster(SOURCE.read_bytes(), start_date=START,
+                                 public_holiday_days={19}, worksheet_name=SHEET,
+                                 fixed_staff={1}, shift_restrictions={1: {code}},
+                                 max_time_seconds=10)
+
+    def test_staff_count_reaches_workbook_and_solver(self):
+        workbook = load_workbook(SOURCE)
+        workbook["lastRosterRD"]["B18"] = workbook["lastRosterRD"]["B17"].value
+        for column in range(1, 45):
+            workbook[SHEET].cell(22, column).value = workbook[SHEET].cell(21, column).value
+        output = BytesIO()
+        workbook.save(output)
+        workbook.close()
+        for count in (15, 17):
+            with self.subTest(count=count), patch("roster_audit.optimizer._solve_roster", side_effect=RuntimeError("reached")) as solve:
+                with self.assertRaisesRegex(RuntimeError, "reached"):
+                    optimize_full_roster(output.getvalue(), start_date=START,
+                                         public_holiday_days={19}, worksheet_name=SHEET,
+                                         num_staff=count)
+                self.assertEqual(len(solve.call_args.args[0].staff), count)
+                self.assertEqual(len(solve.call_args.args[1]), count)
 
     def test_change_log_records_marker_and_base_changes(self):
         from roster_audit.individual_staff_constraints import Roster, StaffSchedule
@@ -172,3 +198,60 @@ class FullOptimizerTests(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+class PlannerChoiceRegressionTests(unittest.TestCase):
+    def test_exact_restrictions_and_defaults(self):
+        from roster_audit.planner_choices import PlannerChoices
+        choices = PlannerChoices.create(shift_restrictions={1: ["OFF+"]})
+        self.assertEqual(choices.num_staff, 16)
+        self.assertEqual(choices.fixed_staff, frozenset())
+        self.assertEqual(choices.allowed(1, ("OFF", "OFF+", "OFF++")), ("OFF", "OFF++"))
+        self.assertEqual(choices.allowed(2, ("OFF", "OFF+")), ("OFF", "OFF+"))
+        self.assertEqual(PlannerChoices.create(shift_restrictions={1: ["OFF"]}).allowed(
+            1, ("OFF", "OFF+", "OFF++")), ("OFF+", "OFF++"))
+
+    def test_fixed_formula_without_cached_result_is_rejected(self):
+        contents = workbook_with_changes({"D6": '= "OFF"'})
+        with self.assertRaisesRegex(ValueError, "D6.*no readable calculated shift value"):
+            optimize_full_roster(contents, start_date=START, public_holiday_days={19},
+                                 worksheet_name=SHEET, fixed_staff={1}, max_time_seconds=10)
+
+    def test_export_preserves_fixed_formula_cache_and_formatting(self):
+        from zipfile import ZipFile
+        from xml.etree import ElementTree as ET
+        from copy import copy
+        from roster_audit.repair_workbook import load_repair_input
+        from roster_audit.parsing import day_columns
+
+        workbook = load_workbook(BytesIO(SOURCE.read_bytes()))
+        sheet = workbook[SHEET]
+        cell = sheet.cell(6, day_columns()[0])
+        original_code = cell.value
+        cell.value = '= "' + original_code + '"'
+        cell.font = copy(sheet["E6"].font)
+        expected_style = cell.style_id
+        raw = BytesIO()
+        workbook.save(raw)
+        workbook.close()
+        source = BytesIO()
+        with ZipFile(BytesIO(raw.getvalue())) as src, ZipFile(source, "w") as dst:
+            for info in src.infolist():
+                data = src.read(info.filename)
+                if info.filename == "xl/worksheets/sheet1.xml":
+                    root = ET.fromstring(data)
+                    ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+                    formula = root.find('.//m:c[@r="D6"]', ns)
+                    formula.set("t", "str")
+                    formula.find("m:v", ns).text = original_code
+                    data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+                dst.writestr(info, data)
+        contents = source.getvalue()
+        roster, _, _ = load_repair_input(contents, START, SHEET, 16, frozenset({1}))
+        output = write_repaired_roster(contents, SHEET, roster, roster, START, 0, 0, 0, frozenset({1}))
+        saved = load_workbook(BytesIO(output), data_only=False)
+        self.assertEqual(saved[SHEET]["D6"].value, '= "' + original_code + '"')
+        self.assertEqual(saved[SHEET]["D6"].style_id, expected_style)
+        saved.close()
+        saved = load_workbook(BytesIO(output), data_only=True)
+        self.assertEqual(saved[SHEET]["D6"].value, original_code)
+        saved.close()

@@ -1,5 +1,15 @@
 # Roster glossary
 
+## Fixed staff
+
+A staff member whose 28 shift cells must remain exactly as they appear in the
+uploaded roster, including formulas and formatting.
+
+## Shift restriction
+
+A prohibition on assigning a particular shift code to a staff member in the
+resulting roster. Marked codes such as `OFF`, `OFF+`, and `OFF++` are distinct.
+
 ## Weekly rest day
 
 For the weekly rest-day requirement, `RD`, `RD+`, `RD++`, and `VLRD` count

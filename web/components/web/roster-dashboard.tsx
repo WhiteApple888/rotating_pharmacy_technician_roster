@@ -22,6 +22,11 @@ export function RosterDashboard() {
   const [start, setStart] = useState(format(new Date(), "yyyy-MM-dd"))
   const [holidays, setHolidays] = useState<Date[]>([])
   const [staff, setStaff] = useState(16)
+  const [timeLimit, setTimeLimit] = useState("60")
+  const [fixedStaff, setFixedStaff] = useState("")
+  const [restrictions, setRestrictions] = useState<
+    { staff: string; codes: string }[]
+  >([])
   const [audit, setAudit] = useState<AuditResponse | null>(null)
   const [optimized, setOptimized] = useState<Optimization | null>(null)
   const [error, setError] = useState("")
@@ -45,12 +50,86 @@ export function RosterDashboard() {
       setError("Choose a roster start date, then try again.")
       return
     }
-    if (
-      tab === "audit" &&
-      (!Number.isInteger(staff) || staff < 1 || staff > 30)
-    ) {
+    if (!Number.isInteger(staff) || staff < 1 || staff > 30) {
       setError("Enter a staff count between 1 and 30, then try again.")
       return
+    }
+    let fixed: number[] = []
+    const forbidden: Record<string, string[]> = {}
+    if (tab === "optimization") {
+      const seconds = Number(timeLimit)
+      if (
+        !timeLimit.trim() ||
+        !Number.isFinite(seconds) ||
+        seconds <= 0 ||
+        seconds > 120
+      ) {
+        setError(
+          "Enter a solver time limit greater than 0 and no more than 120 seconds."
+        )
+        return
+      }
+      const fixedEntries = fixedStaff.trim()
+        ? fixedStaff.split(",").map((entry) => entry.trim())
+        : []
+      if (
+        fixedEntries.some(
+          (entry) =>
+            !/^\d+$/.test(entry) || Number(entry) < 1 || Number(entry) > staff
+        )
+      ) {
+        setError(
+          `Enter fixed staff numbers between 1 and ${staff}, separated by commas.`
+        )
+        return
+      }
+      fixed = [...new Set(fixedEntries.map(Number))]
+      const validCodes = new Set([
+        "XE1",
+        "XO",
+        "Z1",
+        "Z",
+        "Y",
+        "PH",
+        "VL",
+        "OC",
+        "D",
+        "P",
+        "W",
+        "XE",
+        "VL(TO4H)",
+        "RD",
+        "RD+",
+        "RD++",
+        "VLRD",
+        "VLOFF",
+        "VLPH",
+        "OFF",
+        "OFF+",
+        "OFF++",
+        "NO",
+        "NO+",
+        "NO++",
+      ])
+      for (const restriction of restrictions) {
+        const number = restriction.staff.trim()
+        const codes = restriction.codes
+          .split(",")
+          .map((code) => code.trim().toUpperCase())
+        if (
+          !/^\d+$/.test(number) ||
+          Number(number) < 1 ||
+          Number(number) > staff ||
+          codes.some((code) => !validCodes.has(code))
+        ) {
+          setError(
+            `For each restriction, enter a staff number between 1 and ${staff} and valid shift codes separated by commas.`
+          )
+          return
+        }
+        const key = String(Number(number))
+        forbidden[key] = [...new Set([...(forbidden[key] ?? []), ...codes])]
+      }
     }
     setBusy(true)
     try {
@@ -76,6 +155,10 @@ export function RosterDashboard() {
         data.append("file", file)
         data.append("worksheet_name", sheet)
         data.append("start_date", start)
+        data.append("num_staff", String(staff))
+        data.append("max_time_seconds", timeLimit)
+        data.append("fixed_staff", JSON.stringify(fixed))
+        data.append("shift_restrictions", JSON.stringify(forbidden))
         holidayDates.forEach((date) => data.append("public_holidays", date))
         const response = await fetch("/api/optimize", {
           method: "POST",
@@ -189,7 +272,7 @@ export function RosterDashboard() {
               <AuditPanel
                 staff={staff}
                 setStaff={setStaff}
-                setAudit={setAudit}
+                resetResults={resetResults}
                 audit={audit}
                 busy={busy}
                 error={error}
@@ -197,6 +280,15 @@ export function RosterDashboard() {
               />
               <OptimizationPanel
                 optimized={optimized}
+                staff={staff}
+                timeLimit={timeLimit}
+                fixedStaff={fixedStaff}
+                restrictions={restrictions}
+                setStaff={setStaff}
+                setTimeLimit={setTimeLimit}
+                setFixedStaff={setFixedStaff}
+                setRestrictions={setRestrictions}
+                resetResults={resetResults}
                 busy={busy}
                 error={error}
                 run={run}

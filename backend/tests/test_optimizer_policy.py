@@ -21,7 +21,7 @@ class OptimizerPolicyTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertFalse(valid_takeover_priority(value, 1, set()))
         self.assertFalse(valid_takeover_priority(1, 1, {1}))
-        self.assertFalse(valid_takeover_priority(1, STAFF_COUNT, set()))
+        self.assertFalse(valid_takeover_priority(1, STAFF_COUNT, set(), frozenset({STAFF_COUNT})))
 
     def test_repair_choices_preserve_leave_protected_codes_and_fixed_staff(self):
         for leave in ("VL", "VLOFF", "VLRD"):
@@ -30,7 +30,7 @@ class OptimizerPolicyTests(unittest.TestCase):
         for protected in ("VLPH", "VL(TO4H)", "OC"):
             with self.subTest(protected=protected):
                 self.assertEqual(allowed_shift_codes(protected, 1), (protected,))
-        self.assertEqual(allowed_shift_codes("RD+", STAFF_COUNT), ("RD+",))
+        self.assertEqual(allowed_shift_codes("RD+", STAFF_COUNT, frozenset({STAFF_COUNT})), ("RD+",))
         for original in ("OFF", "PH", "XO"):
             with self.subTest(original=original):
                 choices = set(allowed_shift_codes(original, 1))

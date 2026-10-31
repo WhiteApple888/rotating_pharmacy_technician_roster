@@ -43,7 +43,7 @@ The client is available at `http://localhost:3000`, and the API documentation is
 
 1. Upload an `.xlsx` workbook (up to 10 MB), or paste the active roster and previous rest-day worksheets into the data grid. The grid accepts up to 100 columns and creates a new workbook with `Active Roster` and `lastRosterRD` sheets. Preserve the expected row and column positions described below.
 2. Confirm the input, then select the roster worksheet, start date, and any public holidays. These settings are shared by both workflows.
-3. Choose **Audit**, set the staff count, and run it to see the results; or choose **Optimization** to download a revised workbook. You can run either workflow first. Optimization requires a complete 16-staff roster and a Monday start date.
+3. Choose **Audit**, set the staff count, and run it to see the results; or choose **Optimization** to download a revised workbook. You can run either workflow first. The dashboard currently submits the optimizer's default of 16 staff; the API supports configurable staff counts and restrictions. Optimization requires a Monday start date.
 
 For grid entry, paste the previous rest-day dates in column B of the `Last Roster RD` grid. Dates can be entered as `DD/MM/YYYY`, `YYYY-MM-DD`, or Excel date serials. Grid entry creates a workbook from the entered values; upload the original workbook when its existing layout needs to be preserved.
 
@@ -98,16 +98,28 @@ Responses include the pass/fail status, worksheet name, failure count, and struc
 `POST /optimize-roster` accepts one uploaded 28-day roster. Enter leave as
 `VL`, `VLOFF`, or `VLRD` in that workbook. The solver repairs coverage, hours,
 rest and night sequences directly from the uploaded shifts; it does not infer
-original duties from a rotation or a second workbook. Staff 16 keeps the
-uploaded schedule. The same workbook must contain `lastRosterRD` history.
+original duties from a rotation or a second workbook. The same workbook must
+contain `lastRosterRD` history for every submitted staff member.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `file` | Yes | Complete 16-staff, 28-day roster with leave and a `lastRosterRD` sheet |
+| `file` | Yes | Complete 28-day roster with leave and a `lastRosterRD` sheet |
 | `start_date` | Yes | Roster Day 1, which must be a Monday (`YYYY-MM-DD`) |
 | `public_holidays` | No | Repeated or comma-separated roster days or ISO dates |
 | `worksheet_name` | No | Roster sheet; defaults to the first sheet other than `lastRosterRD` |
 | `max_time_seconds` | No | Solver limit, 60 seconds by default (maximum 120) |
+| `num_staff` | No | Number of consecutive staff rows starting at row 6, 1–30; defaults to 16 |
+| `fixed_staff` | No | JSON array of 1-based staff numbers whose complete shifts, including markers, must remain unchanged; defaults to `[]` |
+| `shift_restrictions` | No | JSON object mapping 1-based staff numbers to arrays of forbidden shift codes; defaults to `{}` |
+
+For example, `fixed_staff=[1,16]` fixes staff in rows 6 and 21, and
+`shift_restrictions={"2":["D","OFF"]}` forbids staff 2 from D and OFF.
+Each restriction applies only to the exact code: OFF, OFF+, and OFF++ are
+independent. Fixed staff retain their original 28 shift cells, including formulas
+and formatting; a fixed formula must have a readable calculated value. Restrictions apply to every day, including existing
+assignments. Contradictory fixed schedules or coverage requirements can make
+the roster infeasible (HTTP 409). With no `fixed_staff` field, staff 16 is no
+longer fixed automatically; pass `[16]` to retain the previous behavior.
 
 ```powershell
 curl.exe -X POST http://localhost:8000/optimize-roster `

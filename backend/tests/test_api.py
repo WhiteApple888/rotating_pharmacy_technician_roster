@@ -16,6 +16,16 @@ from test_full_optimizer import full_roster_with_rest_day_leave
 
 
 class ApiTests(unittest.TestCase):
+    def test_optimizer_options_validate_json_and_staff_numbers(self):
+        params = asyncio.run(optimize_form(start_date=date(2026, 4, 13), num_staff=20,
+            fixed_staff='[1, 20]', shift_restrictions='{"2":["D", "OFF"]}'))
+        self.assertEqual(params.fixed_staff, [1, 20])
+        self.assertEqual(params.shift_restrictions, {2: ["D", "OFF"]})
+        for fixed, restrictions in [('bad', None), ('[21]', None), (None, '{"1":["BAD"]}')]:
+            with self.subTest(fixed=fixed, restrictions=restrictions), self.assertRaises(RequestValidationError):
+                asyncio.run(optimize_form(start_date=date(2026, 4, 13), num_staff=20,
+                                         fixed_staff=fixed, shift_restrictions=restrictions))
+
     def test_optimizer_contract_requires_only_one_workbook(self) -> None:
         schema = app.openapi()
         body = schema["paths"]["/optimize-roster"]["post"]["requestBody"]

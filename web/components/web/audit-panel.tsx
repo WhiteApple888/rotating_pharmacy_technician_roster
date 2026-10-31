@@ -17,7 +17,7 @@ import type { AuditResponse } from "@/lib/schema/audit-api"
 type Props = {
   staff: number
   setStaff: Dispatch<SetStateAction<number>>
-  setAudit: Dispatch<SetStateAction<AuditResponse | null>>
+  resetResults: () => void
   audit: AuditResponse | null
   busy: boolean
   error: string
@@ -26,7 +26,7 @@ type Props = {
 export function AuditPanel({
   staff,
   setStaff,
-  setAudit,
+  resetResults,
   audit,
   busy,
   error,
@@ -68,7 +68,7 @@ export function AuditPanel({
                 value={staff || ""}
                 onChange={(e) => {
                   setStaff(Number(e.target.value))
-                  setAudit(null)
+                  resetResults()
                 }}
               />
             </div>

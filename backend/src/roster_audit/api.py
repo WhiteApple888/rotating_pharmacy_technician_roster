@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import zipfile
 from datetime import date
 from io import BytesIO
@@ -21,10 +22,11 @@ from .api_service import audit_uploaded_roster
 from .individual_staff_constraints import AuditFailure
 from .optimizer import NoFeasibleRosterError, optimize_full_roster
 from .parsing import parse_ph_days
+from .planner_choices import DEFAULT_STAFF_COUNT, MAX_STAFF_COUNT, PlannerChoices
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-MAX_STAFF = 30 # arbitrary max limit
+MAX_STAFF = MAX_STAFF_COUNT
 
 
 def cors_origins() -> list[str]:
@@ -87,10 +89,14 @@ class OptimizeInput(BaseModel):
     public_holidays: list[str] = Field(default_factory=list)
     worksheet_name: str | None = None
     max_time_seconds: float = Field(default=60.0, gt=0, le=120)
+    num_staff: int = Field(default=DEFAULT_STAFF_COUNT, gt=0, le=MAX_STAFF)
+    fixed_staff: list[int] = Field(default_factory=list)
+    shift_restrictions: dict[int, list[str]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_holidays(self) -> "OptimizeInput":
         parse_ph_days(self.public_holidays, self.start_date)
+        PlannerChoices.create(self.num_staff, self.fixed_staff, self.shift_restrictions)
         return self
 
     @property
@@ -111,7 +117,7 @@ class ErrorResponse(BaseModel):
 async def audit_form(
     start_date: Annotated[date, Form()],
     public_holidays: Annotated[list[str] | None, Form()] = None,
-    num_staff: Annotated[int, Form(gt=0, le=MAX_STAFF)] = 16,
+    num_staff: Annotated[int, Form(gt=0, le=MAX_STAFF)] = DEFAULT_STAFF_COUNT,
     worksheet_name: Annotated[str | None, Form()] = None,
 ) -> AuditInput:
     """Parse both repeated and comma-separated ``public_holidays`` fields."""
@@ -131,6 +137,9 @@ async def optimize_form(
     public_holidays: Annotated[list[str] | None, Form()] = None,
     worksheet_name: Annotated[str | None, Form()] = None,
     max_time_seconds: Annotated[float, Form(gt=0, le=120)] = 60.0,
+    num_staff: Annotated[int, Form(gt=0, le=MAX_STAFF)] = DEFAULT_STAFF_COUNT,
+    fixed_staff: Annotated[str | None, Form()] = None,
+    shift_restrictions: Annotated[str | None, Form()] = None,
 ) -> OptimizeInput:
     """Parse optimizer multipart fields."""
     try:
@@ -139,9 +148,14 @@ async def optimize_form(
             public_holidays=public_holidays or [],
             worksheet_name=worksheet_name,
             max_time_seconds=max_time_seconds,
+            num_staff=num_staff,
+            fixed_staff=json.loads(fixed_staff) if fixed_staff is not None else [],
+            shift_restrictions=json.loads(shift_restrictions) if shift_restrictions is not None else {},
         )
     except ValidationError as exc:
         raise RequestValidationError(exc.errors()) from exc
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise RequestValidationError([{"loc": ("body",), "msg": "fixed_staff and shift_restrictions must be valid JSON.", "type": "value_error"}]) from exc
 
 
 app = FastAPI(
@@ -325,6 +339,9 @@ async def optimize(
             public_holiday_days=parameters.public_holiday_days,
             worksheet_name=parameters.worksheet_name,
             max_time_seconds=parameters.max_time_seconds,
+            num_staff=parameters.num_staff,
+            fixed_staff=set(parameters.fixed_staff),
+            shift_restrictions=parameters.shift_restrictions,
         )
     except NoFeasibleRosterError as exc:
         raise HTTPException(

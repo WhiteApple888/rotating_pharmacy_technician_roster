@@ -3,9 +3,10 @@
 from ortools.sat.python import cp_model
 
 from .individual_policy import DPW_CODES
+from .planner_choices import DEFAULT_STAFF_COUNT
 from .rest_day_policy import DAYS_PER_WEEK, WEEKS_PER_ROSTER
 
-STAFF_COUNT = 16
+STAFF_COUNT = DEFAULT_STAFF_COUNT
 DAYS = DAYS_PER_WEEK * WEEKS_PER_ROSTER
 MAX_PRIORITY = 6
 DAY_DUTY_CODES = frozenset({"Z", "Y", "XE1", "Z1", "XE"})
@@ -18,9 +19,9 @@ FREE_CHANGE_GROUPS = (LEAVE_OPTIONS, frozenset({"OFF", "RD"}), frozenset({"Z", "
 MARKER_BASE_WEIGHT = {"OFF": 0, "RD": 1, "NO": 2}
 
 
-def allowed_shift_codes(original: str, staff: int) -> tuple[str, ...]:
+def allowed_shift_codes(original: str, staff: int, fixed_staff: frozenset[int] = frozenset()) -> tuple[str, ...]:
     """Return repair choices while preserving fixed staff and protected shifts."""
-    if staff == STAFF_COUNT or original in PROTECTED_CODES:
+    if staff in fixed_staff or original in PROTECTED_CODES:
         return (original,)
     if original in LEAVE_OPTIONS:
         return tuple(sorted(LEAVE_OPTIONS))
@@ -38,9 +39,9 @@ def prohibits_unscored_day_cover(original: str, proposed: str, priority: int | N
     return proposed in DAY_DUTY_CODES and priority is None and original.rstrip("+") == "NO"
 
 
-def valid_takeover_priority(value: object, staff: int, used: set[int]) -> bool:
+def valid_takeover_priority(value: object, staff: int, used: set[int], fixed_staff: frozenset[int] = frozenset()) -> bool:
     """A supplied score is unique, in range, and absent for fixed staff."""
-    return (staff != STAFF_COUNT and not isinstance(value, bool)
+    return (staff not in fixed_staff and not isinstance(value, bool)
             and isinstance(value, int) and 1 <= value <= MAX_PRIORITY and value not in used)
 
 
@@ -51,9 +52,9 @@ def _new_d_cost(x: dict[tuple[int, int, str], cp_model.IntVar],
                if code == "D" and baseline[staff - 1][day - 1] not in DPW_CODES)
 
 
-def _first_stage_cost(fallback_cost, priority_cost, new_d_cost, change_cost):
+def _first_stage_cost(fallback_cost, priority_cost, new_d_cost, change_cost, staff_count: int = STAFF_COUNT):
     """Combine roster-wide objectives in their required lexicographic order."""
-    cells = STAFF_COUNT * DAYS
+    cells = staff_count * DAYS
     return (((fallback_cost * (MAX_PRIORITY * cells + 1) + priority_cost) * (cells + 1)
              + new_d_cost) * (cells + 1) + change_cost)
 

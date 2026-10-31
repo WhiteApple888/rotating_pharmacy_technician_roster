@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from math import isfinite
 from time import monotonic
 
 from ortools.sat.python import cp_model
@@ -22,6 +23,7 @@ from .optimization_policy import (
     _change_cost, _first_stage_cost, _marker, _marker_cost, _new_d_cost,
     allowed_shift_codes, is_new_duty_cover, prohibits_unscored_day_cover,
 )
+from .planner_choices import PlannerChoices
 from .rest_day_policy import (
     DAYS_PER_WEEK, MAX_REST_DAY_GAP, REST_DAY_CODES, REST_DAY_NO_PLUS_CODES,
     REST_DAYS_PER_WEEK, WEEKS_PER_ROSTER,
@@ -117,15 +119,27 @@ def optimize_full_roster(
     public_holiday_days: set[int],
     worksheet_name: str | None,
     max_time_seconds: float = 60.0,
+    num_staff: int = STAFF_COUNT,
+    fixed_staff: set[int] | None = None,
+    shift_restrictions: dict[int, set[str]] | None = None,
 ) -> FullOptimizationResult:
     """Repair only the uploaded roster, preserving priorities before change cost."""
-    if max_time_seconds <= 0:
+    if not isfinite(max_time_seconds) or max_time_seconds <= 0:
         raise ValueError("max_time_seconds must be positive.")
+    choices = PlannerChoices.create(num_staff, fixed_staff, shift_restrictions)
+    fixed_staff = choices.fixed_staff
+    restrictions = choices.shift_restrictions
     deadline = monotonic() + max_time_seconds
     if start_date.weekday() != 0:
         raise ValueError("Roster start_date must be a Monday to match the workbook layout.")
-    roster, prior, priorities = load_repair_input(workbook_bytes, start_date, worksheet_name)
-    proposed, duty_status = _solve_roster(roster, prior, priorities, start_date, public_holiday_days, deadline)
+    roster, prior, priorities = load_repair_input(workbook_bytes, start_date, worksheet_name, num_staff, fixed_staff)
+    for staff in fixed_staff:
+        for day, code in enumerate(roster.staff[staff - 1].shifts, start=1):
+            if code in restrictions.get(staff, ()):
+                raise NoFeasibleRosterError(
+                    f"Staff {staff}, day {day} is fixed to restricted shift {code}."
+                )
+    proposed, duty_status = _solve_roster(roster, prior, priorities, start_date, public_holiday_days, deadline, fixed_staff, restrictions)
     failures = audit_loaded_roster(proposed, public_holiday_days, start_date, prior)
     if failures:
         first = failures[0]
@@ -135,8 +149,8 @@ def optimize_full_roster(
 
     changes, cell_edits, plus_changes = _count_changes(roster, proposed)
     output = write_repaired_roster(workbook_bytes, roster.worksheet, roster, proposed, start_date,
-                                   changes, cell_edits, plus_changes)
-    exported = load_exported_roster(output, roster.worksheet)
+                                   changes, cell_edits, plus_changes, fixed_staff)
+    exported = load_exported_roster(output, roster.worksheet, num_staff)
     if exported != proposed or audit_loaded_roster(
         exported, public_holiday_days, start_date, prior,
     ):
@@ -160,8 +174,11 @@ def _count_changes(original: Roster, proposed: Roster) -> tuple[int, int, int]:
 
 
 def _solve_roster(roster: Roster, prior, priorities, start_date: date,
-                  public_holiday_days: set[int], deadline: float):
+                  public_holiday_days: set[int], deadline: float,
+                  fixed_staff: frozenset[int] = frozenset(),
+                  shift_restrictions: dict[int, set[str]] | None = None):
     """Construct and solve the duty and marker optimization passes."""
+    choices_policy = PlannerChoices.create(len(roster.staff), fixed_staff, shift_restrictions)
     baseline = tuple(schedule.shifts for schedule in roster.staff)
     for staff, shifts in enumerate(baseline, start=1):
         for day, shift in enumerate(shifts, start=1):
@@ -172,10 +189,12 @@ def _solve_roster(roster: Roster, prior, priorities, start_date: date,
     codes = tuple(sorted(set(SHIFT_HOURS)))
     x: dict[tuple[int, int, str], cp_model.IntVar] = {}
     changed: list[cp_model.IntVar] = []
-    for staff in range(1, STAFF_COUNT + 1):
+    staff_count = len(roster.staff)
+    for staff in range(1, staff_count + 1):
         for day in range(1, DAYS + 1):
             original = baseline[staff - 1][day - 1]
-            allowed = allowed_shift_codes(original, staff)
+            allowed = allowed_shift_codes(original, staff, fixed_staff)
+            allowed = choices_policy.allowed(staff, allowed)
             choices = [
                 model.new_bool_var(f"s{staff}_d{day}_{code}")
                 for code in allowed
@@ -218,21 +237,21 @@ def _solve_roster(roster: Roster, prior, priorities, start_date: date,
             else:
                 priority_terms.append(priority * variable)
 
-    for staff in range(1, STAFF_COUNT + 1):
+    for staff in range(1, staff_count + 1):
         _add_hours_constraint(model, x, staff, codes)
         _add_rest_day_constraints(model, shift, staff, prior[staff - 1], start_date)
         _add_night_shift_constraints(model, shift, staff)
 
 
     for day in range(1, DAYS + 1):
-        _add_daily_coverage_constraints(model, shift, day, public_holiday_days)
+        _add_daily_coverage_constraints(model, shift, day, public_holiday_days, staff_count)
 
     # Each component is bounded across the entire roster, so lower-priority
     # costs cannot outweigh even one unit of a higher-priority cost.
     fallback_cost = sum(fallback_terms)
     priority_cost = sum(priority_terms)
     new_d_cost = _new_d_cost(x, baseline)
-    model.minimize(_first_stage_cost(fallback_cost, priority_cost, new_d_cost, sum(changed)))
+    model.minimize(_first_stage_cost(fallback_cost, priority_cost, new_d_cost, sum(changed), staff_count))
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max(0.001, (deadline - monotonic()) * 0.85)
     solver.parameters.num_search_workers = 8
@@ -254,7 +273,7 @@ def _solve_roster(roster: Roster, prior, priorities, start_date: date,
     # prevents changing duties merely to manufacture preferred marker holders.
     # The same individual constraints remain active, including unmarked-RD gaps.
     duty_status = status
-    for staff in range(1, STAFF_COUNT + 1):
+    for staff in range(1, staff_count + 1):
         for day in range(1, DAYS + 1):
             selected = next(
                 code for code in codes

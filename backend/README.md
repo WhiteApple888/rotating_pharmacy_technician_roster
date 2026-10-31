@@ -11,3 +11,5 @@ after honoring weekly takeover priorities. Leave variants, OFF/RD variants,
 Z/Y/Z1 conversions and marker changes are free. It downloads an XLSX copy only
 after the exported roster passes the audit. See the repository README for
 fields, zero-cost groups, and response count headers.
+The API also accepts `num_staff`, JSON `fixed_staff`, and JSON
+`shift_restrictions`; see the repository README for their formats and defaults.
