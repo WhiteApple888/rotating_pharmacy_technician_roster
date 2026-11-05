@@ -170,8 +170,10 @@ export function RosterDashboard() {
             `${payload?.error?.message ?? "The optimizer could not process this workbook."} Check the workbook requirements and settings, then try again.`
           )
         } else {
+          const output = await response.blob()
           setOptimized({
-            url: URL.createObjectURL(await response.blob()),
+            url: URL.createObjectURL(output),
+            output,
             status: response.headers.get("x-roster-status"),
             penalized: response.headers.get("x-roster-penalized-changes"),
             edits: response.headers.get("x-roster-cell-edits"),
@@ -255,7 +257,7 @@ export function RosterDashboard() {
                 setTab(value)
                 setError("")
               }}
-              className="gap-0"
+              className="min-w-0 gap-0"
             >
               <TabsList className="h-12 w-full justify-start rounded-b-none border bg-card p-1">
                 <TabsTrigger disabled={busy} className="max-w-44" value="audit">

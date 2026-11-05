@@ -15,9 +15,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { TabsContent } from "@/components/ui/tabs"
 import { ErrorMessage } from "@/components/web/error-message"
+import { OptimizationOutputGrid } from "@/components/web/optimization-output-grid"
 
 export type Optimization = {
   url: string
+  output: Blob
   status: string | null
   penalized: string | null
   edits: string | null
@@ -55,7 +57,7 @@ export function OptimizationPanel({
 }) {
   return (
     <TabsContent value="optimization">
-      <Card className="rounded-t-none py-0">
+      <Card className="min-w-0 rounded-t-none py-0">
         <CardContent className="p-6 sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -85,7 +87,8 @@ export function OptimizationPanel({
                 member.
               </li>
               <li>
-                • Indicate any staff row(s) whose schedule(s) must stay fixed below.
+                • Indicate any staff row(s) whose schedule(s) must stay fixed
+                below.
               </li>
             </ul>
           </div>
@@ -111,9 +114,7 @@ export function OptimizationPanel({
                     resetResults()
                   }}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Max: 30
-                </p>
+                <p className="text-xs text-muted-foreground">Max: 30</p>
               </div>
               <div className="flex flex-col gap-2">
                 <label htmlFor="solver-time" className="text-sm font-medium">
@@ -155,7 +156,8 @@ export function OptimizationPanel({
                 }}
               />
               <p className="text-xs leading-5 text-muted-foreground">
-                 Uploaded shifts will stay unchanged. No staff are fixed by default.
+                Uploaded shifts will stay unchanged. No staff are fixed by
+                default.
               </p>
             </div>
             <fieldset className="flex flex-col gap-3">
@@ -309,17 +311,25 @@ export function OptimizationPanel({
                 edits count changed roster cells, and marker changes count
                 changes to + or ++ markers. See the Change Log for details.
               </p>
-              <Button
-                nativeButton={false}
-                render={
-                  <a href={optimized.url} download="optimized_roster.xlsx" />
-                }
-              >
-                <Download /> Download workbook
-              </Button>
-              <p className="text-xs leading-5 text-muted-foreground">
-                The workbook includes a Change Log with details of the edits.
-              </p>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    nativeButton={false}
+                    render={
+                      <a
+                        href={optimized.url}
+                        download="optimized_roster.xlsx"
+                      />
+                    }
+                  >
+                    <Download data-icon="inline-start" /> Download workbook
+                  </Button>
+                </div>
+                <OptimizationOutputGrid output={optimized.output} />
+                <p className="text-xs leading-5 text-muted-foreground">
+                  The workbook includes a Change Log with details of the edits.
+                </p>
+              </div>
             </div>
           )}
         </CardContent>

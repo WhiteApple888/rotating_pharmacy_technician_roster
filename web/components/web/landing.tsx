@@ -72,6 +72,7 @@ export function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-5">
               <Button
+                nativeButton={false}
                 size="lg"
                 className="h-11 px-5"
                 render={<a href="#workspace" />}
