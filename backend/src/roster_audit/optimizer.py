@@ -248,10 +248,11 @@ def _solve_roster(roster: Roster, prior, priorities, start_date: date,
 
     # Each component is bounded across the entire roster, so lower-priority
     # costs cannot outweigh even one unit of a higher-priority cost.
+    z4_cost = sum(variable for (_, _, code), variable in x.items() if code == "Z4")
     fallback_cost = sum(fallback_terms)
     priority_cost = sum(priority_terms)
     new_d_cost = _new_d_cost(x, baseline)
-    model.minimize(_first_stage_cost(fallback_cost, priority_cost, new_d_cost, sum(changed), staff_count))
+    model.minimize(_first_stage_cost(z4_cost, fallback_cost, priority_cost, new_d_cost, sum(changed), staff_count))
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max(0.001, (deadline - monotonic()) * 0.85)
     solver.parameters.num_search_workers = 8

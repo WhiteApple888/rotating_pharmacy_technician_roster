@@ -37,12 +37,13 @@ class OptimizerPolicyTests(unittest.TestCase):
                 self.assertIn(original, choices)
                 self.assertFalse(({"VL", "OC", "PH", "XO"} - {original}) & choices)
                 self.assertIn("Z1", choices)
+                self.assertIn("Z4", choices)
 
     def test_priority_applies_only_to_new_duty_cover(self):
         for original, proposed, expected in (
             ("OFF", "P", True), ("D", "P", False), ("VL", "D", True),
             ("RD+", "Z1", True), ("NO++", "XE", True), ("Z", "Y", False),
-            ("VL", "Z1", False), ("OFF", "RD", False),
+            ("VL", "Z1", False), ("OFF", "RD", False), ("OFF", "Z4", True),
         ):
             with self.subTest(original=original, proposed=proposed):
                 self.assertEqual(is_new_duty_cover(original, proposed), expected)
@@ -51,6 +52,7 @@ class OptimizerPolicyTests(unittest.TestCase):
         for original in ("NO", "NO+", "NO++"):
             with self.subTest(original=original):
                 self.assertTrue(prohibits_unscored_day_cover(original, "Z1", None))
+                self.assertTrue(prohibits_unscored_day_cover(original, "Z4", None))
                 self.assertFalse(prohibits_unscored_day_cover(original, "Z1", 1))
                 self.assertFalse(prohibits_unscored_day_cover(original, "P", None))
         self.assertFalse(prohibits_unscored_day_cover("OFF", "Z1", None))
@@ -65,6 +67,7 @@ class OptimizerPolicyTests(unittest.TestCase):
         fallback = fallback or {}
         priority = priority or {}
         model.minimize(_first_stage_cost(
+            0,
             sum(fallback.get(code, 0) * var for (_, _, code), var in x.items()),
             sum(priority.get(code, 0) * var for (_, _, code), var in x.items()),
             _new_d_cost(x, ((original,),)),
@@ -103,9 +106,24 @@ class OptimizerPolicyTests(unittest.TestCase):
     def test_weights_cover_full_roster(self):
         cells = STAFF_COUNT * DAYS
         cost = _first_stage_cost
-        self.assertGreater(cost(1, 0, 0, 0), cost(0, 6 * cells, cells, cells))
-        self.assertGreater(cost(0, 1, 0, 0), cost(0, 0, cells, cells))
-        self.assertGreater(cost(0, 0, 1, 0), cost(0, 0, 0, cells))
+        self.assertGreater(cost(1, 0, 0, 0, 0), cost(0, cells, 6 * cells, cells, cells))
+        self.assertGreater(cost(0, 1, 0, 0, 0), cost(0, 0, 6 * cells, cells, cells))
+        self.assertGreater(cost(0, 0, 1, 0, 0), cost(0, 0, 0, cells, cells))
+        self.assertGreater(cost(0, 0, 0, 1, 0), cost(0, 0, 0, 0, cells))
+
+    def test_solver_uses_z4_only_when_required(self):
+        for required, expected in ((False, 0), (True, 1)):
+            with self.subTest(required=required):
+                model = cp_model.CpModel()
+                z4 = model.new_bool_var("z4")
+                alternative = model.new_bool_var("alternative")
+                model.add_exactly_one(z4, alternative)
+                if required:
+                    model.add(z4 == 1)
+                model.minimize(_first_stage_cost(z4, alternative, 6 * alternative, 0, 0))
+                solver = cp_model.CpSolver()
+                self.assertEqual(solver.solve(model), cp_model.OPTIMAL)
+                self.assertEqual(solver.value(z4), expected)
 
     def test_allowed_groups_and_all_marker_variants_are_free(self):
         groups = (

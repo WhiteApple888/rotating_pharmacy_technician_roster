@@ -67,6 +67,17 @@ class DailyPolicyParityTests(unittest.TestCase):
         self.assert_coverage(7, sunday, set(), True)
         self.assert_coverage(7, sunday + ["Y"], set(), False)
 
+    def test_xe_codes_forbidden_on_normal_weekdays_and_saturday(self):
+        for day in range(1, 7):
+            with self.subTest(day=day):
+                rules = [rule for rule in coverage_rules_for_day(day, set())
+                         if rule.label == "XE/XE1"]
+                self.assertEqual(len(rules), 1)
+                self.assertEqual((rules[0].comparison, rules[0].target), ("exactly", 0))
+        monday = ["D", "D", "P", "W", "Z1", "Z1", "Z1", "Z1", "OFF+", "OFF++"]
+        for code in ("XE", "XE1"):
+            self.assert_coverage(1, monday + [code], set(), False)
+
     def test_public_holiday_rules_replace_normal_rules(self):
         monday_holiday = ["D", "D", "P", "W", "Z1", "Z1", "Z", "Y", "XE", "XE1", "OFF+", "OFF++"]
         self.assert_coverage(1, monday_holiday, {1}, True)

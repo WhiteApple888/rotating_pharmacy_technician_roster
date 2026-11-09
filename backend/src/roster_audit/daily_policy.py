@@ -16,6 +16,7 @@ Z1_Y_CODES = frozenset({"Z1", "Y"})
 VL_OC_CODES = frozenset({"VL", "VLOFF", "VLRD", "OC"})
 
 ALL_DAYS = frozenset(WEEKDAY_NAMES)
+ALL_DAYS_EXCEPT_SUN = frozenset(WEEKDAY_NAMES[:6])
 MON_TUE = frozenset({"Monday", "Tuesday"})
 MON_THU_FRI = frozenset({"Monday", "Thursday", "Friday"})
 TUE_WED = frozenset({"Tuesday", "Wednesday"})
@@ -49,6 +50,7 @@ NORMAL_COVERAGE_RULES = (
     CoverageRule("Y", frozenset({"Y"}), 1, "exactly", frozenset({"Saturday"})),
     CoverageRule("Y", frozenset({"Y"}), 2, "exactly", frozenset({"Sunday"})),
     CoverageRule("XE/XE1", XE_XE1_CODES, 2, "exactly", frozenset({"Sunday"})),
+    CoverageRule("XE/XE1", XE_XE1_CODES, 0, "exactly", ALL_DAYS_EXCEPT_SUN),
 )
 
 PH_COVERAGE_RULES = (

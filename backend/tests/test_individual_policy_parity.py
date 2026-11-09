@@ -55,6 +55,8 @@ class IndividualPolicyParityTests(unittest.TestCase):
         self.assert_hours(["XE1"] * 21 + ["OFF"] * 7, False)
         self.assert_hours(["D", "P"] + ["XE1"] * 17 + ["RD"] * 9, True)
         self.assert_hours(["XE"] * 2 + ["XE1"] * 19 + ["VLRD"] * 7, True)
+        self.assert_hours(["Z4"] * 2 + ["XE1"] * 19 + ["OFF"] * 7, True)
+        self.assert_hours(["Z4"] + ["XE1"] * 19 + ["OFF"] * 8, False)
 
     def test_nights_followed_by_nights_or_each_no_variant(self):
         for night in ("D", "P", "W"):

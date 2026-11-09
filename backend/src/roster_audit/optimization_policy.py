@@ -9,7 +9,7 @@ from .rest_day_policy import DAYS_PER_WEEK, WEEKS_PER_ROSTER
 STAFF_COUNT = DEFAULT_STAFF_COUNT
 DAYS = DAYS_PER_WEEK * WEEKS_PER_ROSTER
 MAX_PRIORITY = 6
-DAY_DUTY_CODES = frozenset({"Z", "Y", "XE1", "Z1", "XE"})
+DAY_DUTY_CODES = frozenset({"Z", "Y", "XE1", "Z1", "XE", "Z4"})
 MARKER_BASES = frozenset({"OFF", "RD", "NO"})
 MARKER_CODES = frozenset(base + marker for base in MARKER_BASES for marker in ("", "+", "++"))
 LEAVE_OPTIONS = frozenset({"VL", "VLOFF", "VLRD"})
@@ -52,11 +52,11 @@ def _new_d_cost(x: dict[tuple[int, int, str], cp_model.IntVar],
                if code == "D" and baseline[staff - 1][day - 1] not in DPW_CODES)
 
 
-def _first_stage_cost(fallback_cost, priority_cost, new_d_cost, change_cost, staff_count: int = STAFF_COUNT):
+def _first_stage_cost(z4_cost, fallback_cost, priority_cost, new_d_cost, change_cost, staff_count: int = STAFF_COUNT):
     """Combine roster-wide objectives in their required lexicographic order."""
     cells = staff_count * DAYS
-    return (((fallback_cost * (MAX_PRIORITY * cells + 1) + priority_cost) * (cells + 1)
-             + new_d_cost) * (cells + 1) + change_cost)
+    return (((((z4_cost * (cells + 1) + fallback_cost) * (MAX_PRIORITY * cells + 1)
+               + priority_cost) * (cells + 1) + new_d_cost) * (cells + 1)) + change_cost)
 
 
 def _marker(code: str) -> str:
