@@ -47,16 +47,27 @@ def valid_takeover_priority(value: object, staff: int, used: set[int], fixed_sta
 
 def _new_d_cost(x: dict[tuple[int, int, str], cp_model.IntVar],
                 baseline: tuple[tuple[str, ...], ...]):
-    """Count D only when the uploaded cell was outside the night-duty group."""
+    """Count D assignments that were not already D."""
     return sum(variable for (staff, day, code), variable in x.items()
-               if code == "D" and baseline[staff - 1][day - 1] not in DPW_CODES)
+               if code == "D" and baseline[staff - 1][day - 1] != "D"
+    )
 
 
-def _first_stage_cost(z4_cost, fallback_cost, priority_cost, new_d_cost, change_cost, staff_count: int = STAFF_COUNT):
-    """Combine roster-wide objectives in their required lexicographic order."""
+def _lost_dpw_cost(x: dict[tuple[int, int, str], cp_model.IntVar],
+                   baseline: tuple[tuple[str, ...], ...]):
+    """Count original D/P/W assignments replaced by a non-D/P/W shift."""
+    return sum(variable for (staff, day, code), variable in x.items()
+               if baseline[staff - 1][day - 1] in DPW_CODES and code not in DPW_CODES)
+
+
+def _first_stage_cost(lost_dpw_cost, z4_cost, fallback_cost, priority_cost, new_d_cost, change_cost, staff_count: int = STAFF_COUNT):
+    """Rank lost D/P/W, Z4, new D, fallback, priority, then changes."""
     cells = staff_count * DAYS
-    return (((((z4_cost * (cells + 1) + fallback_cost) * (MAX_PRIORITY * cells + 1)
-               + priority_cost) * (cells + 1) + new_d_cost) * (cells + 1)) + change_cost)
+    cost = lost_dpw_cost * (cells + 1) + z4_cost
+    cost = cost * (cells + 1) + new_d_cost
+    cost = cost * (cells + 1) + fallback_cost
+    cost = cost * (MAX_PRIORITY * cells + 1) + priority_cost
+    return cost * (cells + 1) + change_cost
 
 
 def _marker(code: str) -> str:

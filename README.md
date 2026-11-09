@@ -139,9 +139,11 @@ leave, OC, PH or XO cells to repair hours.
 
 Weekly priority scores in C/N/Y/AJ are read from the uploaded roster. Scores
 may be blank; supplied scores must be unique integers from 1 to 6 per week.
-The solver first minimizes unscored duty cover, then the total priority score
-of new duty cover, then penalized changes. This preserves priorities ahead of
-change minimization. Unscored day-duty cover from a resting status must
+The solver minimizes, in order: original D/P/W shifts changed to non-D/P/W,
+Z4 assignments, newly assigned D shifts, unscored duty cover, the total priority
+score of new duty cover, and penalized changes. Each preference takes precedence
+over all later preferences; hard constraints always apply. Changes between D,
+P and W do not count as lost D/P/W shifts. Unscored day-duty cover from a resting status must
 originate from OFF/RD rather than NO. Existing working day duties may be
 rearranged while satisfying coverage.
 

@@ -9,7 +9,7 @@ from roster_audit.optimization_policy import (
     valid_takeover_priority,
 )
 from roster_audit.optimizer import (
-    DAYS, STAFF_COUNT, _change_cost, _first_stage_cost, _marker_cost, _new_d_cost,
+    DAYS, STAFF_COUNT, _change_cost, _first_stage_cost, _lost_dpw_cost, _marker_cost, _new_d_cost,
 )
 
 
@@ -67,6 +67,7 @@ class OptimizerPolicyTests(unittest.TestCase):
         fallback = fallback or {}
         priority = priority or {}
         model.minimize(_first_stage_cost(
+            _lost_dpw_cost(x, ((original,),)),
             0,
             sum(fallback.get(code, 0) * var for (_, _, code), var in x.items()),
             sum(priority.get(code, 0) * var for (_, _, code), var in x.items()),
@@ -86,19 +87,24 @@ class OptimizerPolicyTests(unittest.TestCase):
             self.assertEqual(self.solve_night_choice("OFF", force=code, return_cost=True),
                              (code, optimum))
 
-    def test_existing_nights_do_not_count_as_new_d(self):
-        for original in ("D", "P", "W"):
-            model = cp_model.CpModel()
-            d = model.new_bool_var("D")
-            model.add(d == 1)
-            solver = cp_model.CpSolver()
-            self.assertEqual(solver.solve(model), cp_model.OPTIMAL)
-            self.assertEqual(solver.value(_new_d_cost({(1, 1, "D"): d}, ((original,),))), 0)
+    def test_new_d_cost_depends_on_original_shift(self):
+        for original, expected in (("D", 0), ("W", 1), ("P", 1), ("OFF", 1)):
+            with self.subTest(original=original):
+                model = cp_model.CpModel()
+                d = model.new_bool_var("D")
+                model.add(d == 1)
+                solver = cp_model.CpSolver()
+                self.assertEqual(solver.solve(model), cp_model.OPTIMAL)
+                self.assertEqual(
+                    solver.value(_new_d_cost({(1, 1, "D"): d}, ((original,),))),
+                    expected,
+                )
         self.assertEqual(self.solve_night_choice("D"), "D")
 
-    def test_higher_priority_costs_outweigh_new_d(self):
-        self.assertEqual(self.solve_night_choice("OFF", fallback={"P": 1, "W": 1}), "D")
-        self.assertEqual(self.solve_night_choice("OFF", priority={"D": 1, "P": 2, "W": 2}), "D")
+    def test_new_d_outweighs_fallback_and_priority_costs(self):
+        self.assertIn(self.solve_night_choice("OFF", fallback={"P": 1, "W": 1}), {"P", "W"})
+        self.assertIn(self.solve_night_choice("OFF", priority={"D": 1, "P": 2, "W": 2}), {"P", "W"})
+        self.assertIn(self.solve_night_choice("P", fallback={"P": 1, "W": 1}), {"P", "W"})
 
     def test_hard_constraint_can_require_new_d(self):
         self.assertEqual(self.solve_night_choice("OFF", force="D"), "D")
@@ -106,10 +112,21 @@ class OptimizerPolicyTests(unittest.TestCase):
     def test_weights_cover_full_roster(self):
         cells = STAFF_COUNT * DAYS
         cost = _first_stage_cost
-        self.assertGreater(cost(1, 0, 0, 0, 0), cost(0, cells, 6 * cells, cells, cells))
-        self.assertGreater(cost(0, 1, 0, 0, 0), cost(0, 0, 6 * cells, cells, cells))
-        self.assertGreater(cost(0, 0, 1, 0, 0), cost(0, 0, 0, cells, cells))
-        self.assertGreater(cost(0, 0, 0, 1, 0), cost(0, 0, 0, 0, cells))
+        self.assertGreater(cost(1, 0, 0, 0, 0, 0), cost(0, cells, cells, 6 * cells, cells, cells))
+        self.assertGreater(cost(0, 1, 0, 0, 0, 0), cost(0, 0, cells, 6 * cells, cells, cells))
+        self.assertGreater(cost(0, 0, 0, 0, 1, 0), cost(0, 0, cells, 6 * cells, 0, cells))
+        self.assertGreater(cost(0, 0, 1, 0, 0, 0), cost(0, 0, 0, 6 * cells, 0, cells))
+        self.assertGreater(cost(0, 0, 0, 1, 0, 0), cost(0, 0, 0, 0, 0, cells))
+
+    def test_objective_is_valid_at_maximum_staff_count(self):
+        model = cp_model.CpModel()
+        cells = 30 * DAYS
+        counts = [model.new_int_var(0, bound, name) for name, bound in (
+            ("lost", cells), ("z4", cells), ("fallback", cells),
+            ("priority", 6 * cells), ("new_d", cells), ("changes", cells),
+        )]
+        model.minimize(_first_stage_cost(*counts, staff_count=30))
+        self.assertEqual(model.validate(), "")
 
     def test_solver_uses_z4_only_when_required(self):
         for required, expected in ((False, 0), (True, 1)):
@@ -120,10 +137,35 @@ class OptimizerPolicyTests(unittest.TestCase):
                 model.add_exactly_one(z4, alternative)
                 if required:
                     model.add(z4 == 1)
-                model.minimize(_first_stage_cost(z4, alternative, 6 * alternative, 0, 0))
+                model.minimize(_first_stage_cost(0, z4, alternative, 6 * alternative, alternative, 0))
                 solver = cp_model.CpSolver()
                 self.assertEqual(solver.solve(model), cp_model.OPTIMAL)
                 self.assertEqual(solver.value(z4), expected)
+
+    def test_preserving_night_shift_takes_precedence_over_z4(self):
+        model = cp_model.CpModel()
+        x = {(1, 1, code): model.new_bool_var(code) for code in ("P", "W", "Z1")}
+        model.add_exactly_one(x.values())
+        z4 = model.new_bool_var("z4_elsewhere")
+        model.add(z4 + x[1, 1, "Z1"] == 1)
+        model.minimize(_first_stage_cost(_lost_dpw_cost(x, (("P",),)), z4, 0, 0, 0, 0))
+        solver = cp_model.CpSolver()
+        self.assertEqual(solver.solve(model), cp_model.OPTIMAL)
+        self.assertEqual(solver.value(z4), 1)
+        self.assertEqual(solver.value(x[1, 1, "Z1"]), 0)
+        self.assertEqual(solver.value(_lost_dpw_cost(x, (("P",),))), 0)
+
+    def test_lost_dpw_counts_only_night_to_non_night(self):
+        for original in ("D", "P", "W", "OFF"):
+            for proposed in ("D", "P", "W", "Z1", "Z4", "NO"):
+                with self.subTest(original=original, proposed=proposed):
+                    model = cp_model.CpModel()
+                    selected = model.new_bool_var("selected")
+                    model.add(selected == 1)
+                    solver = cp_model.CpSolver()
+                    self.assertEqual(solver.solve(model), cp_model.OPTIMAL)
+                    self.assertEqual(solver.value(_lost_dpw_cost({(1, 1, proposed): selected}, ((original,),))),
+                                     int(original in {"D", "P", "W"} and proposed not in {"D", "P", "W"}))
 
     def test_allowed_groups_and_all_marker_variants_are_free(self):
         groups = (

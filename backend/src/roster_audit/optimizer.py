@@ -20,7 +20,7 @@ from .individual_policy import (
 from .individual_staff_constraints import Roster, StaffSchedule
 from .optimization_policy import (
     DAYS, MARKER_BASES, STAFF_COUNT,
-    _change_cost, _first_stage_cost, _marker, _marker_cost, _new_d_cost,
+    _change_cost, _first_stage_cost, _lost_dpw_cost, _marker, _marker_cost, _new_d_cost,
     allowed_shift_codes, is_new_duty_cover, prohibits_unscored_day_cover,
 )
 from .planner_choices import PlannerChoices
@@ -248,11 +248,20 @@ def _solve_roster(roster: Roster, prior, priorities, start_date: date,
 
     # Each component is bounded across the entire roster, so lower-priority
     # costs cannot outweigh even one unit of a higher-priority cost.
-    z4_cost = sum(variable for (_, _, code), variable in x.items() if code == "Z4")
-    fallback_cost = sum(fallback_terms)
-    priority_cost = sum(priority_terms)
-    new_d_cost = _new_d_cost(x, baseline)
-    model.minimize(_first_stage_cost(z4_cost, fallback_cost, priority_cost, new_d_cost, sum(changed), staff_count))
+    # Explicit bounds let CP-SAT validate the weighted objective without
+    # treating mutually exclusive choices as independently selectable.
+    cells = staff_count * DAYS
+    def bounded_cost(name, expression, upper_bound):
+        cost = model.new_int_var(0, upper_bound, name)
+        model.add(cost == expression)
+        return cost
+
+    z4_cost = bounded_cost("z4_cost", sum(variable for (_, _, code), variable in x.items() if code == "Z4"), cells)
+    fallback_cost = bounded_cost("fallback_cost", sum(fallback_terms), cells)
+    priority_cost = bounded_cost("priority_cost", sum(priority_terms), 6 * cells)
+    new_d_cost = bounded_cost("new_d_cost", _new_d_cost(x, baseline), cells)
+    lost_dpw_cost = bounded_cost("lost_dpw_cost", _lost_dpw_cost(x, baseline), cells)
+    model.minimize(_first_stage_cost(lost_dpw_cost, z4_cost, fallback_cost, priority_cost, new_d_cost, sum(changed), staff_count))
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max(0.001, (deadline - monotonic()) * 0.85)
     solver.parameters.num_search_workers = 8
